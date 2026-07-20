@@ -459,13 +459,13 @@ class Controller:
         _log.debug("按键: '%s' x%d", key, times)
         for _ in range(times):
             if movement =="release":
-                continue
+                pass
             else:
                 _kb_controller.press(pk)
             
             sleep(0.05)
             if movement =="press":
-                continue
+                pass
             else:
                 _kb_controller.release(pk)
             sleep(interval)
