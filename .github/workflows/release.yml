@@ -85,7 +85,7 @@ jobs:
 
             1. 下载 `GBFR_AutoReBattle.exe`
             2. 放置在任意目录
-            3. 启动游戏 → 屏幕显示「跳跃」时按 `F1` 启动
+            3. 按 `F1` 启动
             4. 按 `F2` 停止
 
             ### ⚠️ 注意事项
@@ -94,6 +94,7 @@ jobs:
             - 游戏使用 **无边框窗口** 或 **窗口化**
             - 以 **管理员身份** 运行 EXE
             - 启动时不要遮挡游戏窗口
+            - 忍不了了！我要马上开碧！马上开碧！马上开碧！马上开碧！
           files: dist/GBFR_AutoReBattle.exe
           draft: false
           prerelease: false
