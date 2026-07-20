@@ -1,0 +1,13 @@
+__pycache__/
+logs/
+screenshot/
+
+/.vscode
+/.venv
+/module/__pycache__
+/screenshot
+/custom_test.py
+/granblue_fantasy_relink.ico
+/build
+/dist
+GBFR_AutoReBattle.spec
