@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   # ─────────────────────────────────────────────────────────
-  #  阶段 1：检测 commit 是否包含中/大版本号
+  #  阶段 1：检测 commit 是否包含版本号
   # ─────────────────────────────────────────────────────────
   check:
     runs-on: ubuntu-latest
@@ -36,31 +36,10 @@ jobs:
             exit 0
           fi
 
-          echo "🔍 检测到版本: $VER"
-
-          # 按 . 拆开
-          RAW=$(echo "$VER" | sed 's/^V//')
-          MAJOR=$(echo "$RAW" | cut -d. -f1)
-          MINOR=$(echo "$RAW" | cut -d. -f2)
-          PATCH=$(echo "$RAW" | cut -d. -f3)
-
-          echo "  Major = $MAJOR"
-          echo "  Minor = $MINOR"
-          echo "  Patch = ${PATCH:-无}"
-
-          # ── 判定规则 ──
-          #   PATCH 为空（V1.1 格式）  → 中/大版本 → 发版 ✅
-          #   PATCH = 0（V1.1.0 格式）→ 中/大版本 → 发版 ✅
-          #   PATCH > 0（V1.0.1 格式）→ 小版本   → 跳过 ⏭
-          if [ -z "$PATCH" ] || [ "$PATCH" = "0" ]; then
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "version=$VER" >> "$GITHUB_OUTPUT"
-            echo "✅ 中/大版本更新 → 触发发版"
-          else
-            echo "should_release=false" >> "$GITHUB_OUTPUT"
-            echo "version=$VER" >> "$GITHUB_OUTPUT"
-            echo "⏭ 小版本更新 (PATCH=$PATCH) → 跳过发版"
-          fi
+          # 任何版本号都触发发版（大/中/小版本号均打包）
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "✅ 检测到版本: $VER → 触发发版"
 
   # ─────────────────────────────────────────────────────────
   #  阶段 2：打包 EXE + 发布 Release
