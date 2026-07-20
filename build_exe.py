@@ -14,6 +14,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+# 强制 UTF-8 输出（CI 环境 cp1252 会报错）
+if sys.stdout.encoding != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+if sys.stderr.encoding != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+
 # ── 路径配置 ─────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent
 ENTRY_SCRIPT = PROJECT_ROOT / "main.py"
