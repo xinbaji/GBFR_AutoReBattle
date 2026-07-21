@@ -1,5 +1,4 @@
 pywin32==312
-pynput==1.8.2
 numpy
 Pillow
 PyYAML

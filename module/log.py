@@ -14,16 +14,24 @@ from datetime import datetime
 def get_app_root() -> str:
     """返回 EXE / py 文件所在的真实目录
 
-    PyInstaller 单文件模式下 sys.executable 指向 exe 真实路径，
-    而不是临时解压目录 _MEIPASS。普通运行时退化为脚本所在目录。
+    PyInstaller / Nuitka 单文件模式下，程序会解压到临时目录运行，
+    但 sys.executable 始终指向 exe 真实路径。普通运行时退化为脚本所在目录。
     """
+    exe = os.path.abspath(sys.executable)
+    exe_name = os.path.basename(exe).lower()
+
+    # PyInstaller 打包
     if getattr(sys, "frozen", False):
-        # PyInstaller 打包：exe 所在目录
-        return os.path.dirname(os.path.abspath(sys.executable))
-    else:
-        # 普通 Python：main.py 的上级目录（项目根）
-        # log.py 在 module/ 下，所以上两级是项目根
-        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.dirname(exe)
+
+    # Nuitka 编译：sys.executable 就是生成的 xxx.exe（不含 "python"）
+    # 普通 Python：sys.executable 是 python.exe / pythonw.exe
+    if "python" not in exe_name:
+        return os.path.dirname(exe)
+
+    # 普通 Python 开发环境：main.py 的上级目录（项目根）
+    # log.py 在 module/ 下，所以上两级是项目根
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 # ============================================================
@@ -38,22 +46,25 @@ def _enable_ansi() -> None:
         except Exception:
             pass
 
+
 def count_cjk(text: str) -> int:
     """统计：汉字 + 中文标点 + 全角数字/字母 + 日文假名 + 韩文 的个数"""
     pattern = re.compile(
-        r'[\u3400-\u4dbf'          # 汉字 扩展A
-        r'\u4e00-\u9fff'           # 汉字 基本区
-        r'\uf900-\ufaff'           # 汉字 兼容区
-        r'\u3000-\u303f'           # 中文标点 / CJK 符号
-        r'\uff00-\uffef'           # 全角数字/字母/符号
-        r'\u3040-\u309f'           # 平假名
-        r'\u30a0-\u30ff'           # 片假名
-        r'\uff66-\uff9d'           # 半角片假名
-        r'\uac00-\ud7a3'           # 韩文音节
-        r'\u3130-\u318f'           # 韩文兼容字母
-        r'\u1100-\u11ff]'          # 韩文 Jamo
+        r"[\u3400-\u4dbf"  # 汉字 扩展A
+        r"\u4e00-\u9fff"  # 汉字 基本区
+        r"\uf900-\ufaff"  # 汉字 兼容区
+        r"\u3000-\u303f"  # 中文标点 / CJK 符号
+        r"\uff00-\uffef"  # 全角数字/字母/符号
+        r"\u3040-\u309f"  # 平假名
+        r"\u30a0-\u30ff"  # 片假名
+        r"\uff66-\uff9d"  # 半角片假名
+        r"\uac00-\ud7a3"  # 韩文音节
+        r"\u3130-\u318f"  # 韩文兼容字母
+        r"\u1100-\u11ff]"  # 韩文 Jamo
     )
     return len(pattern.findall(text))
+
+
 _enable_ansi()
 
 
@@ -62,23 +73,24 @@ _enable_ansi()
 # ============================================================
 class C:
     """ANSI 颜色 / 样式"""
-    RST   = "\033[0m"
-    DIM   = "\033[2m"
-    RED   = "\033[31m"
-    GRN   = "\033[32m"
-    YLW   = "\033[33m"
-    BLU   = "\033[34m"
-    CYN   = "\033[36m"
+
+    RST = "\033[0m"
+    DIM = "\033[2m"
+    RED = "\033[31m"
+    GRN = "\033[32m"
+    YLW = "\033[33m"
+    BLU = "\033[34m"
+    CYN = "\033[36m"
     B_RED = "\033[91m"
     B_YLW = "\033[93m"
 
 
 # 级别 → 控制台颜色
 LEVEL_COLOR: dict[str, str] = {
-    "DEBUG":    C.CYN,
-    "INFO":     C.GRN,
-    "WARNING":  C.B_YLW,
-    "ERROR":    C.RED,
+    "DEBUG": C.CYN,
+    "INFO": C.GRN,
+    "WARNING": C.B_YLW,
+    "ERROR": C.RED,
     "CRITICAL": C.B_RED,
 }
 
@@ -101,7 +113,9 @@ class ConsoleFormatter(logging.Formatter):
 
         # 补齐到 60 字符宽，保证右侧对齐
         # 计算左侧可视宽度（去掉 ANSI 码）
-        left_vis = len(f"[{record.levelname:<5}] {record.getMessage()}")+count_cjk(record.getMessage())
+        left_vis = len(f"[{record.levelname:<5}] {record.getMessage()}") + count_cjk(
+            record.getMessage()
+        )
         pad = max(2, 59 - left_vis)
         msg = f"{left}{' ' * pad}│ {right}"
 

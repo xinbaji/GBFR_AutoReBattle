@@ -36,13 +36,12 @@ jobs:
             exit 0
           fi
 
-          # 任何版本号都触发发版（大/中/小版本号均打包）
           echo "should_release=true" >> "$GITHUB_OUTPUT"
           echo "version=$VER" >> "$GITHUB_OUTPUT"
           echo "✅ 检测到版本: $VER → 触发发版"
 
   # ─────────────────────────────────────────────────────────
-  #  阶段 2：打包 EXE + 发布 Release
+  #  阶段 2：Nuitka 打包 EXE + 发布 Release
   # ─────────────────────────────────────────────────────────
   release:
     needs: check
@@ -63,9 +62,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install nuitka ordered-set zstandard
 
-      - name: 🔨 打包 EXE
+      - name: 🔨 Nuitka 打包 EXE
         shell: pwsh
         run: python build_exe.py
 
@@ -93,7 +92,7 @@ jobs:
             - 分辨率 **1920×1080 及以上**
             - 游戏使用 **无边框窗口** 或 **窗口化**
             - 以 **管理员身份** 运行 EXE
-            - 启动时不要遮挡游戏窗口
+            - 启动后不要遮挡游戏窗口
             - 忍不了了！我要马上开碧！马上开碧！马上开碧！马上开碧！
           files: dist/GBFR_AutoReBattle.exe
           draft: false

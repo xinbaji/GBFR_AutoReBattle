@@ -13,8 +13,9 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/OCR-RapidOCR-blueviolet?style=flat-square" alt="OCR Engine">
-  <img src="https://img.shields.io/badge/Input-pynput-orange?style=flat-square" alt="Input">
+  <img src="https://img.shields.io/badge/Input-ctypes_SendInput-blue?style=flat-square" alt="Input">
   <img src="https://img.shields.io/badge/Screen-ImageGrab-lightgrey?style=flat-square" alt="Screen">
+  <img src="https://img.shields.io/badge/Pack-Nuitka-2E8B57?style=flat-square" alt="Pack">
 </p>
 
 ---
@@ -47,17 +48,19 @@
 
 | 🏷️ 模块 | ✨ 说明 |
 |:--|:--|
-| 🔎 **OCR 文字识别** | 基于 rapidocr-onnxruntime-lite识别游戏 UI 文字 |
+| 🔎 **OCR 文字识别** | 基于 rapidocr-onnxruntime-lite 识别游戏 UI 文字 |
 | 🖥️ **窗口无关截图** | 截取屏幕像素而非窗口，游戏在后台也能正常运行 |
-| ⌨️ **pynput 键盘模拟** | 底层键盘事件注入，绕过大部分反作弊检测 |
+| ⌨️ **ctypes SendInput** | 裸系统 API 键盘模拟，零依赖，体积最小化 |
 | 🔥 **一键启停** | F1 开始循环 / F2 立即停止，随时掌控 |
 | 📊 **彩色控制台** | ANSI 彩色日志，运行状态一目了然 |
 | 📝 **完整日志文件** | 每次运行自动生成 `logs/gbfr.log`，方便回溯排查 |
 | 🧩 **无边框窗口感知** | 自动适配 DPI 缩放，精准坐标映射 |
 | 🔒 **管理员运行** | 自动提权，确保按键注入生效 |
+| 📦 **Nuitka 打包** | 原生编译，单文件 EXE 体积极致压缩 |
 
 ---
 
+## 🎯 工作原理
 
 脚本循环执行以下阶段：
 
@@ -131,12 +134,11 @@
 
 | 编号 | 建议 | 说明 |
 |:--:|:--|:--|
-| ④ | 🔒 **以管理员身份运行** | 程序会自动提权，确保 `pynput` 按键注入对游戏生效 |
+| ④ | 🔒 **以管理员身份运行** | 程序会自动提权，确保按键注入对游戏生效 |
 | ⑤ | 🖥️ **不要遮挡游戏窗口** | 脚本截取的是屏幕像素，窗口被遮挡会导致识别失败 |
 | ⑥ | 🎮 **游戏音效可保留** | 脚本不使用图像匹配，不会与游戏画面冲突 |
-| ⑦ | 🚫 **关闭杀毒软件误报** | `pynput` 模拟按键可能被部分杀软误判，添加信任即可 |
-| ⑧ | ⏸️ **结算阶段不要手动操作** | 脚本会连点跳过结算，手动操作可能打断流程 |
-| ⑩ | 🔤 **游戏语言为简中** | OCR 识别的是中文文字，其他语言界面无法识别 |
+| ⑦ | ⏸️ **结算阶段不要手动操作** | 脚本会连点跳过结算，手动操作可能打断流程 |
+| ⑧ | 🔤 **游戏语言为简中** | OCR 识别的是中文文字，其他语言界面无法识别 |
 
 ---
 
@@ -156,16 +158,15 @@
 2. 将游戏切换为**无边框窗口**模式（窗口化模式下鼠标点击可能不准）
 </details>
 
-
-
 ---
 
 ## 📂 项目结构
 
 ```
 GBFR_AutoReBattle/
-├── GBFR_AutoReBattle.exe     ← 打包后的可执行文件
+├── GBFR_AutoReBattle.exe     ← 打包后的可执行文件（Nuitka 原生编译）
 ├── main.py                   ← 主程序入口
+├── build_exe.py              ← Nuitka 打包脚本
 ├── module/
 │   ├── controller.py         ← 核心控制器（截图 / OCR / 按键 / 热键）
 │   ├── log.py                ← 彩色日志系统

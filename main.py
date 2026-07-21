@@ -16,8 +16,12 @@ def run_as_admin() -> None:
         ctypes.windll.shell32.IsUserAnAdmin() != 0
     except Exception:
         ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", sys.executable,
-            " ".join(sys.argv), None, 1,
+            None,
+            "runas",
+            sys.executable,
+            " ".join(sys.argv),
+            None,
+            1,
         )
         sys.exit(0)
 
@@ -27,37 +31,37 @@ def run_as_admin() -> None:
 # ============================================================
 def relink_battle(relink) -> None:
     """单次战斗 → 结算 → 再次挑战 的完整循环"""
-    jump_flags=True
+    jump_flags = True
     while True:
-        if relink.running==False:
+        if relink.running == False:
             return
-        if relink.wait("继续", timeout = 0) and jump_flags == False:
-            relink.press("enter",times=20)
+        if relink.wait("继续", timeout=0) and jump_flags == False:
+            relink.press("enter", times=20)
             break
-        if relink.wait("跳跃",fail_press=["enter"],timeout=0):
-            jump_flags =False
+        if relink.wait("跳跃", fail_press=["enter"], timeout=0):
+            jump_flags = False
             relink.click(key="middle")
-            relink.press("w",movement="press")
-            sleep(3)
-            relink.press("w",movement="release")
-            relink.press("w")
-        
-    
-    relink.wait("再次", fail_press=["enter"],timeout=30)
+            relink.press("w", movement="press")
+            sleep(2)
+            relink.press("w", movement="release")
+
+    relink.wait("再次", fail_press=["enter"], timeout=30)
     while True:
-        jump_flags=True
-        if relink.running==False:
+        jump_flags = True
+        if relink.running == False:
             return
-        
-        if relink.wait("撤销", fail_press=[("3",0.5)],timeout=0):
-            relink.press("enter",times=5)
+
+        if relink.wait("撤销", fail_press=[("3", 0.4)], timeout=0):
+            relink.press("enter", times=5)
             break
-        if relink.wait("挑战",timeout=0,):
+        if relink.wait(
+            "挑战",
+            timeout=0,
+        ):
             relink.press("w")
             sleep(0.5)
-            relink.press("enter",times=5)
+            relink.press("enter", times=5)
             break
-        
 
 
 # ============================================================
@@ -66,20 +70,18 @@ def relink_battle(relink) -> None:
 if __name__ == "__main__":
     run_as_admin()
 
-    
-
     RELINK_DICT = {
-        "跳跃":  [0.733, 0.8681, 0.7595, 0.8938],
-        "再次":  [0.1121, 0.8916, 0.1742, 0.9145],
-        "撤销":  [0.1121, 0.8916, 0.1742, 0.9145],
-        "继续":  [0.8757, 0.9312, 0.9042, 0.959],
-        "挑战":  [0.4489, 0.3231, 0.5578, 0.3787],
+        "跳跃": [0.733, 0.8681, 0.7595, 0.8938],
+        "再次": [0.1121, 0.8916, 0.1742, 0.9145],
+        "撤销": [0.1121, 0.8916, 0.1742, 0.9145],
+        "继续": [0.8757, 0.9312, 0.9042, 0.959],
+        "挑战": [0.4489, 0.3231, 0.5578, 0.3787],
     }
 
     is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
     log.info("=" * 40)
     log.info("  GBFR 自动重战 启动")
-    
+
     log.info("  Admin: %s", "是" if is_admin else "否")
     log.info("=" * 40)
 
@@ -105,7 +107,6 @@ if __name__ == "__main__":
         while not relink.running:
             sleep(0.1)
 
-        
         times += 1
         log.info("---- 第 %d 次战斗 ----", times)
 
@@ -114,4 +115,3 @@ if __name__ == "__main__":
         # 如果 F2 被按下，running 为 False，退出战斗循环
         if not relink.running:
             log.info("<< 战斗循环停止 按 F1 重新开始")
-            

@@ -10,3 +10,5 @@ screenshot/
 /build
 /dist
 GBFR_AutoReBattle.spec
+
+/nuitka-crash-report.xml

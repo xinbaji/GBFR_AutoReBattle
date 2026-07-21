@@ -1,7 +1,12 @@
 """
-GBFR AutoReBattle  PyInstaller 单文件 EXE 打包脚本
+GBFR AutoReBattle  Nuitka 单文件 EXE 打包脚本
+
+- 使用 Nuitka 原生编译 Python → C → 可执行文件
+- 禁用缓存、anti-bloat 插件排除无用 stdlib（文档/示例/语言/元数据）
+- 单文件输出，保留控制台，使用项目 .ico
 
 使用方法:
+    pip install nuitka ordered-set zstandard
     python build_exe.py
 
 输出:
@@ -14,7 +19,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-# 强制 UTF-8 输出（CI 环境 cp1252 会报错）
+# 强制 UTF-8 输出
 if sys.stdout.encoding != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
 if sys.stderr.encoding != "utf-8":
@@ -23,91 +28,101 @@ if sys.stderr.encoding != "utf-8":
 # ── 路径配置 ─────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent
 ENTRY_SCRIPT = PROJECT_ROOT / "main.py"
-ICON_FILE    = PROJECT_ROOT / "granblue_fantasy_relink.ico"
-APP_NAME     = "GBFR_AutoReBattle"
-DIST_DIR     = PROJECT_ROOT / "dist"
+ICON_FILE = PROJECT_ROOT / "granblue_fantasy_relink.ico"
+APP_NAME = "GBFR_AutoReBattle"
+DIST_DIR = PROJECT_ROOT / "dist"
 
 
-# ── 辅助 ─────────────────────────────────────────────────
-def find_upx() -> str | None:
-    """查找 UPX 可执行文件，找不到返回 None"""
-    # 1) 尝试在 PATH 中找到
-    which = shutil.which("upx")
-    if which:
-        return which
-    # 2) 尝试常见 pip 安装路径
-    candidates = [
-        PROJECT_ROOT / ".venv" / "Scripts" / "upx.exe",
-        Path(sys.executable).parent / "Scripts" / "upx.exe",
-    ]
-    for c in candidates:
-        if c.is_file():
-            return str(c)
-    return None
-
-
+# ── 清理 ─────────────────────────────────────────────────
 def cleanup() -> None:
     """清理上次构建的临时文件"""
-    for name in ["build", "dist", "__pycache__"]:
+    for name in ["build", "dist"]:
         p = PROJECT_ROOT / name
         if p.exists():
             shutil.rmtree(p)
-    spec = PROJECT_ROOT / f"{APP_NAME}.spec"
-    if spec.exists():
-        spec.unlink()
+    # 清理 Nuitka 缓存目录
+    for pattern in ["*.build", "*.dist", "*.onefile-build"]:
+        for p in PROJECT_ROOT.glob(pattern):
+            if p.is_dir():
+                shutil.rmtree(p)
 
 
-# ── 构建命令 ─────────────────────────────────────────────
+# ── Nuitka 命令 ──────────────────────────────────────────
+def find_nuitka():
+    """查找 nuitka 可执行文件路径"""
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "nuitka", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            return [sys.executable, "-m", "nuitka"]
+    except Exception:
+        pass
+
+    which = shutil.which("nuitka")
+    if which:
+        return [which]
+    raise RuntimeError(
+        "未找到 Nuitka，请执行: pip install nuitka ordered-set zstandard"
+    )
+
+
 def build_command() -> list[str]:
-    cmd = [
-        sys.executable, "-m", "PyInstaller",
+    nuitka = find_nuitka()
+    models_dir = PROJECT_ROOT / "module" / "rapidocr_onnxruntime" / "models"
+    config_file = PROJECT_ROOT / "module" / "rapidocr_onnxruntime" / "config.yaml"
 
+    cmd = nuitka + [
         # ── 输出控制 ──
-        "--onefile",                          # 单文件 EXE
-        "--console",                          # 控制台程序（带日志窗口）
-        f"--name={APP_NAME}",
-        f"--icon={ICON_FILE}",
-        "--clean",                            # 清除 PyInstaller 缓存
-        "--noconfirm",                        # 覆盖输出不询问
-        "--log-level=WARN",                   # 减少无害的 missing module 输出
-
-        # ── 数据文件（ONNX 模型 + YAML 配置） ──
-        f"--add-data=module{os.sep}rapidocr_onnxruntime{os.sep}config.yaml{os.pathsep}module{os.sep}rapidocr_onnxruntime",
-        f"--add-data=module{os.sep}rapidocr_onnxruntime{os.sep}models{os.pathsep}module{os.sep}rapidocr_onnxruntime{os.sep}models",
-
-        # ── 隐藏导入（部分库 PyInstaller 自动检测不到） ──
-        "--hidden-import=shapely",
-        "--hidden-import=shapely.geometry",
-        "--hidden-import=shapely.affinity",
-        "--hidden-import=pyclipper",
-        "--hidden-import=skimage",
-        "--hidden-import=lazy_loader",
-        "--hidden-import=yaml",
-
-        # ── 排除无用标准库（不破坏依赖的前提下压缩体积） ──
-        # 注意：pickle / email / shelve 是 numpy / logging / importlib 的依赖，不可排除！
-        "--exclude-module=tkinter",
-        "--exclude-module=unittest",
-        "--exclude-module=test",
-        "--exclude-module=pydoc",
-        "--exclude-module=distutils",
-        "--exclude-module=setuptools",
-        "--exclude-module=pkg_resources",
-        "--exclude-module=html",
-        "--exclude-module=http",
-        "--exclude-module=xmlrpc",
-        "--exclude-module=lib2to3",
-        "--exclude-module=ensurepip",
-
+        "--standalone",
+        "--onefile",
+        f"--windows-icon-from-ico={ICON_FILE}",
+        f"--output-dir={DIST_DIR}",
+        f"--output-filename={APP_NAME}.exe",
+        # ── 优化 ──
+        "--remove-output",
+        "--disable-cache=all",
+        "--assume-yes-for-downloads",
+        # ── 压缩由 Nuitka 4.x 自动处理，检测到 zstandard 时自动启用 ──
+        # ── anti-bloat 插件：自动排除文档/示例/语言/测试等元数据 ──
+        "--enable-plugin=anti-bloat",
+        # ── 数据文件 ──
+        f"--include-data-files={config_file}=module/rapidocr_onnxruntime/config.yaml",
+        f"--include-data-dir={models_dir}=module/rapidocr_onnxruntime/models",
+        # ── 隐藏导入 ──
+        "--include-package=shapely",
+        "--include-package=pyclipper",
+        "--include-module=skimage.measure",
+        "--include-package=lazy_loader",
+        "--include-package=yaml",
+        "--include-package=PIL",
+        # ── 禁止导入无用 stdlib ──
+        "--nofollow-import-to=tkinter",
+        "--nofollow-import-to=unittest",
+        "--nofollow-import-to=test",
+        "--nofollow-import-to=pydoc",
+        "--nofollow-import-to=distutils",
+        "--nofollow-import-to=setuptools",
+        "--nofollow-import-to=pkg_resources",
+        "--nofollow-import-to=html",
+        "--nofollow-import-to=http",
+        "--nofollow-import-to=xmlrpc",
+        "--nofollow-import-to=lib2to3",
+        "--nofollow-import-to=ensurepip",
+        "--nofollow-import-to=sqlite3",
+        "--nofollow-import-to=email",
+        "--nofollow-import-to=wsgiref",
+        "--nofollow-import-to=venv",
+        # ── 禁止冗余 DLL ──
+        "--noinclude-dlls=api-ms-win-*.dll",
+        "--noinclude-dlls=ext-ms-win-*.dll",
+        "--include-windows-runtime-dlls=no",
         # ── 入口 ──
         str(ENTRY_SCRIPT),
     ]
-
-    # ── UPX 压缩（如果可用） ──
-    upx_path = find_upx()
-    if upx_path:
-        cmd.insert(5, f"--upx-dir={os.path.dirname(upx_path)}")
-
     return cmd
 
 
@@ -124,24 +139,22 @@ def main() -> None:
     # 2) 清理
     cleanup()
 
-    # 3) UPX 状态
-    upx = find_upx()
-    if upx:
-        print(f"[UPX] 可用 → {upx}")
-    else:
-        print("[UPX] 未检测到（Exe 体积会较大）")
-        print("       安装 UPX: pip install upx  或  下载 https://upx.github.io")
-
-    # 4) 打包
+    # 3) 打包
     cmd = build_command()
+
+    # 使用 64 位 MSVC 编译器工具集（避免 32 位编译器 C1002 堆空间不足）
+    os.environ["VSCMD_ARG_TGT_ARCH"] = "x64"
+
     print(f"\n{'=' * 55}")
-    print(f"  PyInstaller 打包: {APP_NAME}.exe")
+    print(f"  Nuitka 打包: {APP_NAME}.exe")
+    print(f"  C 编译器: MSVC x64")
+    print(f"  模式: standalone + onefile + console")
+    print(f"  压缩: zstd + anti-bloat")
     print(f"{'=' * 55}\n")
-    print(" ".join(cmd), "\n")
 
     subprocess.run(cmd, check=True)
 
-    # 5) 结果
+    # 4) 结果
     exe = DIST_DIR / f"{APP_NAME}.exe"
     if exe.exists():
         size = exe.stat().st_size / (1024 * 1024)
