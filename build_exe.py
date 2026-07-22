@@ -3,8 +3,8 @@ GBFR AutoReBattle  Nuitka 单文件 EXE 打包脚本
 
 - 使用 Nuitka 原生编译 Python -> C -> 可执行文件
 - 禁用缓存、anti-bloat 插件排除无用 stdlib
-- Windows GUI 无控制台窗口，使用项目 .ico
-- 排除控制台/stdlib 无用的子模块以最小化体积
+- 带控制台窗口，使用项目 .ico
+- 排除 stdlib 无用的子模块以最小化体积
 
 使用方法:
     pip install nuitka ordered-set zstandard
@@ -93,8 +93,6 @@ def build_command() -> list[str]:
         # ── 输出控制 ──
         "--standalone",
         "--onefile",
-        "--windows-console-mode=disable",
-        "--enable-plugin=tk-inter",
         f"--windows-icon-from-ico={ICON_FILE}",
         f"--output-dir={DIST_DIR}",
         f"--output-filename={APP_NAME}.exe",
@@ -139,15 +137,6 @@ def build_command() -> list[str]:
         "--nofollow-import-to=webbrowser",
         "--nofollow-import-to=wsgiref",
         "--nofollow-import-to=xmlrpc",
-        # ── 禁止导入 tkinter 无用子模块 ──
-        "--nofollow-import-to=tkinter.ttk",
-        "--nofollow-import-to=tkinter.scrolledtext",
-        "--nofollow-import-to=tkinter.filedialog",
-        "--nofollow-import-to=tkinter.messagebox",
-        "--nofollow-import-to=tkinter.colorchooser",
-        "--nofollow-import-to=tkinter.simpledialog",
-        "--nofollow-import-to=tkinter.dnd",
-        "--nofollow-import-to=tkinter.commondialog",
         # ── 避免冗余模块 ──
         "--nofollow-import-to=shapely.conftest",
         # ── 入口 ──
@@ -178,7 +167,7 @@ def main() -> None:
     print(f"\n{'=' * 55}")
     print(f"  Nuitka 打包: {APP_NAME}.exe")
     print(f"  C 编译器: MSVC x64")
-    print(f"  模式: standalone + onefile + windows (无控制台) + GUI")
+    print(f"  模式: standalone + onefile + console (控制台)")
     print(f"  压缩: zstd + anti-bloat + 全面瘦身")
     print(f"{'=' * 55}\n")
 

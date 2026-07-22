@@ -5,7 +5,6 @@
 import threading
 from time import sleep, time
 from module.controller import Controller
-from gui import Win11StatusGUI
 
 # ============================================================
 #  Relink 战斗逻辑
@@ -85,34 +84,5 @@ if __name__ == "__main__":
     relink.set_battle_start_key("f1")
     relink.set_battle_stop_key("f2")
 
-    # 2. 创建 GUI（传入 controller 让按钮能启停）
-    gui = Win11StatusGUI("GBFR 自动重战", ctrl=relink)
-    gui.start_in_thread()
-    sleep(0.3)
-    gui.set_admin_status(gui.check_admin())
-
-    # 3. 后台同步线程：Controller 状态变化 → GUI 更新
-    def _gui_sync():
-        prev = False
-        while True:
-            cur = relink.running
-            if cur != prev:
-                gui.set_running(cur)
-                prev = cur
-            sleep(0.2)
-
-    threading.Thread(target=_gui_sync, daemon=True).start()
-
-    # 4. 包装战斗函数：统计次数 + 错误上报到 GUI
-    def battle_with_gui(ctrl: Controller):
-        ct = getattr(battle_with_gui, "_count", 0) + 1
-        setattr(battle_with_gui, "_count", ct)
-        gui.set_battle_count(ct)
-        try:
-            relink_battle(ctrl)
-        except Exception as exc:
-            gui.set_error(exc)
-
-    battle_with_gui._count = 0  # type: ignore[attr-defined]
-
-    relink.start(battle_with_gui)
+    # 2. 直接启动战斗循环（控制台模式）
+    relink.start(relink_battle)

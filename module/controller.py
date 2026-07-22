@@ -61,7 +61,7 @@ except Exception:
     pass  
 
 setup_project_log()
-_log = Log("controller", "d").logger  # 新增：全局复用
+_log = Log("controller", "i").logger  # 新增：全局复用
 
 class Controller:
     def __init__(self, target,project_name="Project" ,region_dict=None) -> None:
@@ -75,6 +75,7 @@ class Controller:
         
         self._running: bool = False
         self._hotkeys: dict[int, callable] = {}
+        self._hwnd_warned: bool = False
         
 
         
@@ -91,6 +92,16 @@ class Controller:
             input("")
             sys.exit(1)
         else:
+            # 等待目标窗口出现
+            _log.info("等待目标窗口 '%s' ...", target)
+            while True:
+                hwnd = self._find_window(target)
+                if hwnd is not None:
+                    self._target_hwnd = hwnd
+                    _log.info("已找到窗口: '%s'", target)
+                    break
+                sleep(1)
+
             self._hotkey_thread: threading.Thread | None = None
             self.ocrmodel = RapidOCR()
             self._stop_event = threading.Event()
@@ -114,7 +125,7 @@ class Controller:
             sys.exit(0)
     def screenshot_text(self, text):
         if self.window_rect is None:
-            left, top, width, height = self.get_window_rect()
+            left, top, width, height = self.get_window_rect(silent=True)
         else:
             left, top, width, height = self.window_rect
         if self.text2region is None or text not in self.text2region.keys():
@@ -241,9 +252,12 @@ class Controller:
         hwnd = self._find_window(self.target_window)
         if hwnd is not None:
             self._target_hwnd = hwnd
+            self._hwnd_warned = False
             return hwnd
         else:
-            _log.warning("没有找到窗口: %s ",self.target_window)
+            if not self._hwnd_warned:
+                _log.warning("没有找到窗口: %s ",self.target_window)
+                self._hwnd_warned = True
             if self.running == True:
                 self.running=False
     
@@ -274,7 +288,7 @@ class Controller:
         self._running = value
 
     def set_battle_start_key(self, key: str) -> None:
-        """设置战斗开始快捷键（自动注册热键 + 弹窗通知）
+        """设置战斗开始快捷键（自动注册热键）
         
         :param key: 按键名 (如 'f1', 'f2')
         """
@@ -286,7 +300,7 @@ class Controller:
         self._register_hotkey(key, _on_start)
 
     def set_battle_stop_key(self, key: str) -> None:
-        """设置战斗停止快捷键（自动注册热键 + 弹窗通知）
+        """设置战斗停止快捷键（自动注册热键）
 
         :param key: 按键名 (如 'f1', 'f2')
         """
@@ -471,7 +485,7 @@ class Controller:
         """后台线程：轮询 GetAsyncKeyState 检测热键按下"""
         prev: dict[int, bool] = {}
         while True:
-            for vk, cb in self._hotkeys.items():
+            for vk, cb in list(self._hotkeys.items()):
                 pressed = bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
                 if pressed and not prev.get(vk, False):
                     _log.debug("热键触发: 0x%02X", vk)
