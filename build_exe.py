@@ -1,9 +1,10 @@
 """
 GBFR AutoReBattle  Nuitka 单文件 EXE 打包脚本
 
-- 使用 Nuitka 原生编译 Python → C → 可执行文件
-- 禁用缓存、anti-bloat 插件排除无用 stdlib（文档/示例/语言/元数据）
-- 单文件输出，保留控制台，使用项目 .ico
+- 使用 Nuitka 原生编译 Python -> C -> 可执行文件
+- 禁用缓存、anti-bloat 插件排除无用 stdlib
+- Windows GUI 无控制台窗口，使用项目 .ico
+- 排除控制台/stdlib 无用的子模块以最小化体积
 
 使用方法:
     pip install nuitka ordered-set zstandard
@@ -79,6 +80,8 @@ def build_command() -> list[str]:
         # ── 输出控制 ──
         "--standalone",
         "--onefile",
+        "--windows-disable-console",
+        "--enable-plugin=tk-inter",
         f"--windows-icon-from-ico={ICON_FILE}",
         f"--output-dir={DIST_DIR}",
         f"--output-filename={APP_NAME}.exe",
@@ -99,23 +102,45 @@ def build_command() -> list[str]:
         "--include-package=lazy_loader",
         "--include-package=yaml",
         "--include-package=PIL",
+        # ── 禁止导入控制台模块 ──
+        "--nofollow-import-to=console",
         # ── 禁止导入无用 stdlib ──
-        "--nofollow-import-to=tkinter",
-        "--nofollow-import-to=unittest",
-        "--nofollow-import-to=test",
-        "--nofollow-import-to=pydoc",
+        "--nofollow-import-to=asyncio",
+        "--nofollow-import-to=concurrent",
+        "--nofollow-import-to=csv",
         "--nofollow-import-to=distutils",
-        "--nofollow-import-to=setuptools",
-        "--nofollow-import-to=pkg_resources",
+        "--nofollow-import-to=email",
+        "--nofollow-import-to=ensurepip",
         "--nofollow-import-to=html",
         "--nofollow-import-to=http",
-        "--nofollow-import-to=xmlrpc",
+        "--nofollow-import-to=idlelib",
+        "--nofollow-import-to=json",
         "--nofollow-import-to=lib2to3",
-        "--nofollow-import-to=ensurepip",
+        "--nofollow-import-to=multiprocessing",
+        "--nofollow-import-to=pkg_resources",
+        "--nofollow-import-to=pydoc",
+        "--nofollow-import-to=setuptools",
+        "--nofollow-import-to=socketserver",
         "--nofollow-import-to=sqlite3",
-        "--nofollow-import-to=email",
-        "--nofollow-import-to=wsgiref",
+        "--nofollow-import-to=subprocess",
+        "--nofollow-import-to=test",
+        "--nofollow-import-to=turtledemo",
+        "--nofollow-import-to=unittest",
         "--nofollow-import-to=venv",
+        "--nofollow-import-to=webbrowser",
+        "--nofollow-import-to=wsgiref",
+        "--nofollow-import-to=xmlrpc",
+        # ── 禁止导入 tkinter 无用子模块 ──
+        "--noinclude-module=tkinter.ttk",
+        "--noinclude-module=tkinter.scrolledtext",
+        "--noinclude-module=tkinter.filedialog",
+        "--noinclude-module=tkinter.messagebox",
+        "--noinclude-module=tkinter.colorchooser",
+        "--noinclude-module=tkinter.simpledialog",
+        "--noinclude-module=tkinter.dnd",
+        "--noinclude-module=tkinter.commondialog",
+        # ── 禁止冗余模块 ──
+        "--noinclude-module=shapely.conftest",
         # ── 禁止冗余 DLL ──
         "--noinclude-dlls=api-ms-win-*.dll",
         "--noinclude-dlls=ext-ms-win-*.dll",
@@ -148,8 +173,8 @@ def main() -> None:
     print(f"\n{'=' * 55}")
     print(f"  Nuitka 打包: {APP_NAME}.exe")
     print(f"  C 编译器: MSVC x64")
-    print(f"  模式: standalone + onefile + console")
-    print(f"  压缩: zstd + anti-bloat")
+    print(f"  模式: standalone + onefile + windows (无控制台) + GUI")
+    print(f"  压缩: zstd + anti-bloat + 全面瘦身")
     print(f"{'=' * 55}\n")
 
     subprocess.run(cmd, check=True)

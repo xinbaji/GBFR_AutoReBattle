@@ -2,15 +2,16 @@ import ctypes
 import threading
 from ctypes import wintypes
 from time import sleep, time
-
+import tkinter as tk
+import sys
 import win32api
 import win32con
 import win32gui
 from PIL import Image, ImageGrab
-from module.log import Log
+from module.log import Log,setup_project_log
 from module.rapidocr_onnxruntime import RapidOCR
 
-# ---- SendInput 结构体定义 ----
+
 INPUT_KEYBOARD = 1
 KEYEVENTF_EXTENDEDKEY = 0x0001
 KEYEVENTF_KEYUP = 0x0002
@@ -54,80 +55,63 @@ class INPUT(ctypes.Structure):
     _fields_ = [("type", wintypes.DWORD), ("u", INPUT_union)]
 
 
-# ---- 设置进程 DPI 感知 ----
-# 默认情况下非 DPI 感知进程的窗口坐标会被 Windows 按缩放比例"虚拟化"，
-# 例如 2560×1440 在 150% 缩放时 GetWindowRect 只返回 1707×960。
-# 设置为 Per-Monitor DPI Aware 后，所有坐标 API 均返回物理像素值。
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
 except Exception:
-    pass  # 兼容旧版 Windows（低于 8.1）
+    pass  
 
-
-_log = Log("controller", "i").logger  # 新增：全局复用
-
-
-# ============================================================
-#  虚拟键码 (Virtual-Key Codes) 速查表
-# ============================================================
-#  字母/数字键:
-#    0x30~0x39  = '0'~'9' (主键盘)
-#    0x41~0x5A  = 'A'~'Z'
-#
-#  功能键:
-#    0x70~0x7B  = F1~F12
-#
-#  控制键:
-#    0x0D  = ENTER (回车)
-#    0x1B  = ESC
-#    0x20  = SPACE (空格)
-#    0x08  = BACKSPACE
-#    0x09  = TAB
-#    0x10  = SHIFT
-#    0x11  = CTRL
-#    0x12  = ALT
-#    0x2E  = DELETE
-#
-#  方向键:
-#    0x25  = LEFT
-#    0x26  = UP
-#    0x27  = RIGHT
-#    0x28  = DOWN
-#
-#  小键盘 (Numpad):
-#    0x60~0x69 = Numpad 0~9
-#    0x6A  = Numpad *
-#    0x6B  = Numpad +
-#    0x6D  = Numpad -
-#    0x6E  = Numpad .
-#    0x6F  = Numpad /
-#
-#  符号键:
-#    0xBA  = ; (分号)      0xBB  = = (等号)
-#    0xBC  = , (逗号)      0xBD  = - (减号)
-#    0xBE  = . (句号)      0xBF  = / (斜杠)
-#    0xC0  = ` (反引号)    0xDB  = [ (左方括号)
-#    0xDC  = \ (反斜杠)    0xDD  = ] (右方括号)
-#    0xDE  = ' (单引号)
-# ============================================================
-
+setup_project_log()
+_log = Log("controller", "d").logger  # 新增：全局复用
 
 class Controller:
-    def __init__(self, target, region_dict) -> None:
-        self.ocrmodel = RapidOCR()
+    def __init__(self, target,project_name="Project" ,region_dict=None) -> None:
+        self.run_as_admin()
+        
         self.target_window = target
+        self._target_hwnd: int | None = None
         self.window_rect = None
         self.text2region = region_dict
-        self.target_element = None
-
-        # ---- 热键 ----
+        self.project_name=project_name
+        
         self._running: bool = False
         self._hotkeys: dict[int, callable] = {}
-        self._hotkey_thread: threading.Thread | None = None
+        
 
-        _log.info("初始化完成 | 目标窗口: '%s'", target)
-        _log.debug("区域配置: %s 个", len(region_dict) if region_dict else 0)
+        
+        
+        is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+        _log.info("=" * 40)
+        _log.info("  %s 启动",self.project_name)
+    
+        _log.info("  Admin: %s", "是" if is_admin else "否")
+        _log.info("=" * 40)
+        if not is_admin:
+            _log.warning("尝试以管理员模式启动失败，需要手动以管理员模式运行")
+            _log.info("按 回车 键退出程序")
+            input("")
+            sys.exit(1)
+        else:
+            self._hotkey_thread: threading.Thread | None = None
+            self.ocrmodel = RapidOCR()
+            self._stop_event = threading.Event()
+            self._rect_thread: threading.Thread | None = None
+            self._start_rect_watchdog()
+            self._init_toast()
+            _log.info("初始化完成 | 目标窗口: '%s'", target)
+            _log.debug("区域配置: %s 个", len(region_dict) if region_dict else 0)
+    def run_as_admin(self) -> None:
+        try:
+            ctypes.windll.shell32.IsUserAnAdmin() != 0
+        except Exception:
+            ctypes.windll.shell32.ShellExecuteW(
+            None,
+            "runas",
+            sys.argv[0],            # 原始 exe 路径
+            " ".join(sys.argv[1:]), # 真正的参数
+            None,
+            1,)
 
+            sys.exit(0)
     def screenshot_text(self, text):
         if self.window_rect is None:
             left, top, width, height = self.get_window_rect()
@@ -175,14 +159,14 @@ class Controller:
 
         return img
 
-    def get_window_rect(self):
-        hwnd = self._find_window(self.target_window)
+    def get_window_rect(self, silent: bool = False):
+        hwnd = self._get_hwnd()
         if hwnd is None:
-            _log.warning("未找到窗口: '%s'", self.target_window)
+            if not silent:
+                _log.warning("未找到窗口: '%s'", self.target_window)
             return None
 
-        # 使用客户区矩形 (GetClientRect) 获取实际游戏渲染区域（不含标题栏/边框）
-        # 再通过 ClientToScreen 转换为屏幕物理坐标
+       
         c_left, c_top, c_right, c_bottom = win32gui.GetClientRect(hwnd)
         left, top = win32gui.ClientToScreen(hwnd, (c_left, c_top))
         right, bottom = win32gui.ClientToScreen(hwnd, (c_right, c_bottom))
@@ -190,17 +174,41 @@ class Controller:
         height = bottom - top
         self.window_rect = (left, top, width, height)
         return (left, top, width, height)
+    
+    def _rect_watchdog(self, interval: float = 0.5) -> None:
+        """后台线程：周期性刷新窗口客户区矩形，窗口移动/缩放时保持最新"""
+        while not self._stop_event.is_set():
+            try:
+                self.get_window_rect(silent=True)
+            except Exception:
+                _log.debug("窗口矩形刷新异常（已忽略）", exc_info=True)
+            self._stop_event.wait(interval)
+
+    def _start_rect_watchdog(self, interval: float = 0.5) -> None:
+        """启动窗口矩形监听线程（幂等，重复调用不会起多个线程）"""
+        if self._rect_thread is not None and self._rect_thread.is_alive():
+            return
+        self._rect_thread = threading.Thread(
+            target=self._rect_watchdog, args=(interval,), daemon=True
+        )
+        self._rect_thread.start()
+        _log.debug("窗口矩形监听线程已启动 (间隔 %.1fs)", interval)
+
+    def stop(self) -> None:
+        """停止监听线程（daemon 线程也会随主进程退出，这里用于显式优雅停止）"""
+        self._stop_event.set()
 
     def focus_window(self) -> bool:
-        hwnd = self._find_window(self.target_window)
+        hwnd = self._get_hwnd()
         if hwnd is None:
             _log.warning("聚焦失败，未找到窗口: '%s'", self.target_window)
             return False
 
+        
         user32 = ctypes.windll.user32
         kernel32 = ctypes.windll.kernel32
 
-        # 允许任意进程设置前台窗口
+        
         user32.AllowSetForegroundWindow(-1)  # ASFW_ANY = -1
 
         foreground = user32.GetForegroundWindow()
@@ -218,12 +226,27 @@ class Controller:
             else:
                 win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
                 user32.SetForegroundWindow(hwnd)
-        else:
-            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-            user32.SetForegroundWindow(hwnd)
+        
 
         return user32.GetForegroundWindow() == hwnd
+    def _get_hwnd(self) -> int | None:
+        """返回目标窗口句柄并缓存；窗口句柄失效时自动重新查找
 
+        游戏窗口存活期间 hwnd 稳定，无需每次 EnumWindows 全量枚举。
+        仅用 IsWindow 做一次轻量校验（微秒级），窗口被销毁/重建时才重查。
+        """
+        hwnd = self._target_hwnd
+        if hwnd is not None and win32gui.IsWindow(hwnd):
+            return hwnd
+        hwnd = self._find_window(self.target_window)
+        if hwnd is not None:
+            self._target_hwnd = hwnd
+            return hwnd
+        else:
+            _log.warning("没有找到窗口: %s ",self.target_window)
+            if self.running == True:
+                self.running=False
+    
     def _find_window(self, title: str) -> int | None:
         """按标题（不区分大小写模糊匹配）查找可见窗口句柄"""
         result: list[int] = []
@@ -239,31 +262,205 @@ class Controller:
         return result[0] if result else None
 
     # ============================================================
-    #  热键 (F1 启动 / F2 停止)
+    #  热键系统（内部实现，外部通过 set_battle_start/stop_key 使用）
     # ============================================================
     @property
     def running(self) -> bool:
-        """战斗循环是否运行中，由 F1/F2 切换"""
+        """战斗循环是否运行中"""
         return self._running
 
     @running.setter
     def running(self, value: bool) -> None:
         self._running = value
 
-    def register_hotkey(self, key: str, callback: callable) -> None:
-        """注册热键回调
-
-        :param key:     按键名 (如 'f1', 'f2')，需在 KEY_MAP 中存在
-        :param callback:触发时调用的无参回调函数
+    def set_battle_start_key(self, key: str) -> None:
+        """设置战斗开始快捷键（自动注册热键 + 弹窗通知）
+        
+        :param key: 按键名 (如 'f1', 'f2')
         """
-        vk = self.KEY_MAP.get(key.lower()) if isinstance(key, str) else key
+        def _on_start() -> None:
+            self._running = True
+            _log.info(">> %s 已启动",self.project_name)
+            self._show_toast(self.project_name, "已启动")
+        _log.info("按 %s 启动",key)
+        self._register_hotkey(key, _on_start)
+
+    def set_battle_stop_key(self, key: str) -> None:
+        """设置战斗停止快捷键（自动注册热键 + 弹窗通知）
+
+        :param key: 按键名 (如 'f1', 'f2')
+        """
+        def _on_stop() -> None:
+            self._running = False
+            _log.info("<< %s 已停止 按启动键重新开始",self.project_name)
+            self._show_toast(self.project_name, "已停止，按启动键重新开始")
+        _log.info("按 %s 停止",key)
+        self._register_hotkey(key, _on_stop)
+
+    # ============================================================
+    #  Win11 风格 Toast 通知（tkinter 圆角阴影 + 滑入滑出动画）
+    # ============================================================
+    def _init_toast(self) -> None:
+        """初始化 tkinter 通知系统：在独立 daemon 线程中创建 root 并运行事件循环"""
+        self._tk_root: tk.Tk | None = None
+        self._tk_ready = threading.Event()
+
+        def _tk_thread() -> None:
+            try:
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes("-topmost", True)
+                self._tk_root = root
+            except Exception:
+                self._tk_root = None
+            finally:
+                self._tk_ready.set()
+            if self._tk_root is not None:
+                self._tk_root.mainloop()
+
+        t = threading.Thread(target=_tk_thread, daemon=True)
+        t.start()
+        self._tk_ready.wait(timeout=3)
+
+    def _show_toast(self, title: str, content: str) -> None:
+        """Win11 风格通知：圆角、阴影、滑入滑出动画，总时长 5 秒，非阻塞"""
+        if self._tk_root is None:
+            return
+        # 调度到 tk 主循环线程执行
+        self._tk_root.after(0, self._create_toast, title, content)
+
+    def _create_toast(self, title: str, content: str) -> None:
+        """（在 tk 线程内运行）创建并播放一条 toast 通知"""
+        
+
+        root = self._tk_root
+
+        # —— 样式常量 ——
+        MARGIN = 16
+        WIN_W = 340
+        WIN_H = 90
+        RADIUS = 10
+        BG = "#1e1e1e"
+        BORDER = "#404040"
+        TITLE_FG = "#ffffff"
+        TEXT_FG = "#b0b0b0"
+        SHADOW_ALPHA = 0.25
+        SHADOW_DX = 5
+        SHADOW_DY = 5
+
+        ENTER_MS = 600
+        STAY_MS = 3800  # 5000 - 600 - 600
+        EXIT_MS = 600
+        ENTER_STEPS = 40  # 15ms/step → ~67fps
+        EXIT_STEPS = 30   # 20ms/step → ~50fps
+
+        screen_w = root.winfo_screenwidth()
+        screen_h = root.winfo_screenheight()
+
+        final_x = screen_w - WIN_W - MARGIN
+        final_y = screen_h - WIN_H - MARGIN - 40  # 任务栏上方
+
+        # —— 辅助：裁剪文字防溢出 ——
+        def _clip(text: str, max_chars: int) -> str:
+            return text if len(text) <= max_chars else text[: max_chars - 1] + "…"
+
+        # —— 辅助：绘制圆角矩形（polygon + smooth） ——
+        def _round_rect(c: tk.Canvas, **kw) -> int:
+            x, y, w, h, r = 0, 0, WIN_W, WIN_H, RADIUS
+            pts = [
+                x + r, y, x + w - r, y,
+                x + w, y, x + w, y + r,
+                x + w, y + h - r, x + w, y + h,
+                x + w - r, y + h, x + r, y + h,
+                x, y + h, x, y + h - r,
+                x, y + r, x, y,
+            ]
+            return c.create_polygon(pts, smooth=True, **kw)
+
+        # ===== 阴影窗口 =====
+        shadow = tk.Toplevel(root)
+        shadow.overrideredirect(True)
+        shadow.attributes("-topmost", True)
+        shadow.attributes("-alpha", 0.0)
+        shadow.configure(bg="black")
+        shadow.geometry(f"{WIN_W}x{WIN_H}+{screen_w}+{final_y}")
+        sh_canvas = tk.Canvas(shadow, width=WIN_W, height=WIN_H,
+                              bg="black", highlightthickness=0)
+        sh_canvas.pack(fill="both", expand=True)
+        _round_rect(sh_canvas, fill="black", outline="")
+
+        # ===== 主通知窗口 =====
+        toast = tk.Toplevel(root)
+        toast.overrideredirect(True)
+        toast.attributes("-topmost", True)
+        toast.attributes("-alpha", 0.0)
+        toast.configure(bg=BG)
+        toast.geometry(f"{WIN_W}x{WIN_H}+{screen_w}+{final_y}")
+
+        canvas = tk.Canvas(toast, width=WIN_W, height=WIN_H,
+                           bg=BG, highlightthickness=0)
+        canvas.pack(fill="both", expand=True)
+
+        # 圆角背景 + 边框
+        _round_rect(canvas, fill=BG, outline=BORDER, width=1)
+
+        # 标题与内容
+        title_text = _clip(title, 30)
+        body_text = _clip(content, 45)
+        canvas.create_text(20, 22, text=title_text, anchor="w", fill=TITLE_FG,
+                           font=("Microsoft YaHei UI", 11, "bold"))
+        canvas.create_text(20, 50, text=body_text, anchor="w", fill=TEXT_FG,
+                           font=("Microsoft YaHei UI", 10))
+
+        # ===== 进入动画（smoothstep ease-out） =====
+        def anim_in(step: int = 0) -> None:
+            if step > ENTER_STEPS:
+                toast.attributes("-alpha", 1.0)
+                shadow.attributes("-alpha", SHADOW_ALPHA)
+                root.after(STAY_MS, anim_out)
+                return
+            t = step / ENTER_STEPS
+            # smoothstep: 曲线两端导数为 0，无顿挫感
+            eased = t * t * (3 - 2 * t)
+            cx = screen_w - int((WIN_W + MARGIN) * eased)
+            toast.geometry(f"+{cx}+{final_y}")
+            shadow.geometry(f"+{cx + SHADOW_DX}+{final_y + SHADOW_DY}")
+            toast.attributes("-alpha", eased)
+            shadow.attributes("-alpha", SHADOW_ALPHA * eased)
+            root.after(ENTER_MS // ENTER_STEPS, anim_in, step + 1)
+
+        # ===== 退出动画（smoothstep ease-in） =====
+        def anim_out(step: int = 0) -> None:
+            if step > EXIT_STEPS:
+                toast.destroy()
+                shadow.destroy()
+                return
+            t = step / EXIT_STEPS
+            eased = t * t * (3 - 2 * t)
+            cx = final_x + int((MARGIN + WIN_W) * eased)
+            toast.geometry(f"+{cx}+{final_y}")
+            shadow.geometry(f"+{cx + SHADOW_DX}+{final_y + SHADOW_DY}")
+            toast.attributes("-alpha", 1 - eased)
+            shadow.attributes("-alpha", SHADOW_ALPHA * (1 - eased))
+            root.after(EXIT_MS // EXIT_STEPS, anim_out, step + 1)
+
+        anim_in()
+
+    def _register_hotkey(self, key: str, callback: callable) -> None:
+        """内部注册热键回调，首次调用自动启动监听线程
+
+        :param key:      按键名 (如 'f1', 'f2')，需在 KEY_MAP 中存在
+        :param callback: 触发时调用的无参回调函数
+        """
+        vk = self.KEY_MAP.get(key.lower())
         if vk is None:
             raise ValueError(f"未知的按键名: '{key}'")
         self._hotkeys[vk] = callback
         _log.debug("注册热键: '%s' (0x%02X)", key, vk)
+        self._start_hotkey()
 
-    def start_hotkey(self) -> None:
-        """启动后台热键监听线程"""
+    def _start_hotkey(self) -> None:
+        """启动后台热键监听线程（幂等）"""
         if self._hotkey_thread is not None:
             return
         self._hotkey_thread = threading.Thread(target=self._hotkey_loop, daemon=True)
@@ -339,6 +536,7 @@ class Controller:
                 if self._find_ocr_match(result, text):
                     elapsed = time() + timeout - deadline
                     _log.debug("已找到: '%s' (%.1fs)", text, elapsed)
+                    
                     self._do_press(success_press)
                     return True
 
@@ -408,25 +606,13 @@ class Controller:
             return True
         return False
 
-    def gettextposition(self, text):
-        result = {"text": text, "region": []}
-
-        if self.wait(result["text"], timeout=3):
-            r = self.target_element["location"]
-            s = self.window_rect
-            x1 = int(r[0] / s[2] * 10000) / 10000
-            y1 = int(r[1] / s[3] * 10000) / 10000
-            x2 = int(r[2] / s[2] * 10000) / 10000
-            y2 = int(r[3] / s[3] * 10000) / 10000
-
-            result["region"] = [x1, y1, x2, y2]
-            _log.debug("文字位置: '%s' → %s", text, result["region"])
+    
 
     MOUSE_MAP = {
         "left": [win32con.MOUSEEVENTF_LEFTDOWN, win32con.MOUSEEVENTF_LEFTUP],
         "right": [win32con.MOUSEEVENTF_RIGHTDOWN, win32con.MOUSEEVENTF_RIGHTUP],
         "middle": [win32con.MOUSEEVENTF_MIDDLEDOWN, win32con.MOUSEEVENTF_MIDDLEUP],
-        "left": [win32con.MOUSEEVENTF_XDOWN, win32con.MOUSEEVENTF_XUP],
+        "x": [win32con.MOUSEEVENTF_XDOWN, win32con.MOUSEEVENTF_XUP],
     }
 
     def click(self, x=200, y=200, key="left", times=1, interval=0):
@@ -608,3 +794,14 @@ class Controller:
             if movement != "press":
                 self._send_key(vk, keyup=True)
             sleep(interval)
+    def start(self,func):
+        times = 0
+        while True:
+            # 等待 F1 启动
+            while not self.running:
+                sleep(0.1)
+    
+            times += 1
+            _log.info("---- 第 %d 次战斗 ----", times)
+    
+            func(self)

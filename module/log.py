@@ -14,24 +14,21 @@ from datetime import datetime
 def get_app_root() -> str:
     """返回 EXE / py 文件所在的真实目录
 
-    PyInstaller / Nuitka 单文件模式下，程序会解压到临时目录运行，
-    但 sys.executable 始终指向 exe 真实路径。普通运行时退化为脚本所在目录。
+    Nuitka onefile 模式会用引导程序解包到临时目录运行，此时
+    sys.executable 指向临时目录里的 exe 副本（非原始 exe），
+    因此必须用 sys.argv[0] 才能拿到用户实际运行的原始 exe 路径。
     """
-    exe = os.path.abspath(sys.executable)
-    exe_name = os.path.basename(exe).lower()
+    # sys.argv[0]：onefile/standalone/PyInstaller 下是原始 exe 路径；
+    #              普通 Python 下是启动脚本（main.py）路径
+    argv0 = os.path.abspath(sys.argv[0])
+    base = os.path.basename(argv0).lower()
 
-    # PyInstaller 打包
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(exe)
+    # 极少数情况下 argv[0] 指向 python 解释器，回退到 __file__ 推导
+    if base in ("python.exe", "pythonw.exe", "python3.exe"):
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-    # Nuitka 编译：sys.executable 就是生成的 xxx.exe（不含 "python"）
-    # 普通 Python：sys.executable 是 python.exe / pythonw.exe
-    if "python" not in exe_name:
-        return os.path.dirname(exe)
+    return os.path.dirname(argv0)
 
-    # 普通 Python 开发环境：main.py 的上级目录（项目根）
-    # log.py 在 module/ 下，所以上两级是项目根
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 # ============================================================
@@ -46,10 +43,7 @@ def _enable_ansi() -> None:
         except Exception:
             pass
 
-
-def count_cjk(text: str) -> int:
-    """统计：汉字 + 中文标点 + 全角数字/字母 + 日文假名 + 韩文 的个数"""
-    pattern = re.compile(
+PATTERN = re.compile(
         r"[\u3400-\u4dbf"  # 汉字 扩展A
         r"\u4e00-\u9fff"  # 汉字 基本区
         r"\uf900-\ufaff"  # 汉字 兼容区
@@ -62,7 +56,10 @@ def count_cjk(text: str) -> int:
         r"\u3130-\u318f"  # 韩文兼容字母
         r"\u1100-\u11ff]"  # 韩文 Jamo
     )
-    return len(pattern.findall(text))
+def count_cjk(text: str) -> int:
+    """统计：汉字 + 中文标点 + 全角数字/字母 + 日文假名 + 韩文 的个数"""
+    
+    return len(PATTERN.findall(text))
 
 
 _enable_ansi()
