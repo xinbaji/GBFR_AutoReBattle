@@ -80,7 +80,7 @@ def build_command() -> list[str]:
         # ── 输出控制 ──
         "--standalone",
         "--onefile",
-        "--windows-disable-console",
+        "--windows-console-mode=disable",
         "--enable-plugin=tk-inter",
         f"--windows-icon-from-ico={ICON_FILE}",
         f"--output-dir={DIST_DIR}",
@@ -102,8 +102,6 @@ def build_command() -> list[str]:
         "--include-package=lazy_loader",
         "--include-package=yaml",
         "--include-package=PIL",
-        # ── 禁止导入控制台模块 ──
-        "--nofollow-import-to=console",
         # ── 禁止导入无用 stdlib ──
         "--nofollow-import-to=asyncio",
         "--nofollow-import-to=concurrent",
