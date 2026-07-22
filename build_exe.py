@@ -194,10 +194,11 @@ def main() -> None:
         print(f"  📦 {size:.1f} MB")
         print(f"{'=' * 55}")
     else:
-        print(f"\n[错误] 打包失败，{exe} 未生成")
+        print(f"\n[错误]  打包失败，{exe} 未生成")
         sys.exit(1)
 
 
 if __name__ == "__main__":
     os.chdir(PROJECT_ROOT)
+    
     main()
