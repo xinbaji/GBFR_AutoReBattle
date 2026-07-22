@@ -37,15 +37,28 @@ DIST_DIR = PROJECT_ROOT / "dist"
 # ── 清理 ─────────────────────────────────────────────────
 def cleanup() -> None:
     """清理上次构建的临时文件"""
+    import time
+
+    def rm(p):
+        for _ in range(3):
+            try:
+                if p.exists():
+                    if p.is_dir():
+                        shutil.rmtree(p)
+                    else:
+                        p.unlink()
+                return
+            except PermissionError:
+                time.sleep(1)
+        print(f"[警告] 无法删除: {p}")
+
     for name in ["build", "dist"]:
-        p = PROJECT_ROOT / name
-        if p.exists():
-            shutil.rmtree(p)
+        rm(PROJECT_ROOT / name)
     # 清理 Nuitka 缓存目录
     for pattern in ["*.build", "*.dist", "*.onefile-build"]:
         for p in PROJECT_ROOT.glob(pattern):
             if p.is_dir():
-                shutil.rmtree(p)
+                rm(p)
 
 
 # ── Nuitka 命令 ──────────────────────────────────────────
@@ -90,8 +103,7 @@ def build_command() -> list[str]:
         "--disable-cache=all",
         "--assume-yes-for-downloads",
         # ── 压缩由 Nuitka 4.x 自动处理，检测到 zstandard 时自动启用 ──
-        # ── anti-bloat 插件：自动排除文档/示例/语言/测试等元数据 ──
-        "--enable-plugin=anti-bloat",
+        # ── anti-bloat 在 Nuitka 4.x 中默认启用，无需手动指定 ──
         # ── 数据文件 ──
         f"--include-data-files={config_file}=module/rapidocr_onnxruntime/config.yaml",
         f"--include-data-dir={models_dir}=module/rapidocr_onnxruntime/models",
@@ -99,7 +111,6 @@ def build_command() -> list[str]:
         "--include-package=shapely",
         "--include-package=pyclipper",
         "--include-module=skimage.measure",
-        "--include-package=lazy_loader",
         "--include-package=yaml",
         "--include-package=PIL",
         # ── 禁止导入无用 stdlib ──
@@ -129,20 +140,16 @@ def build_command() -> list[str]:
         "--nofollow-import-to=wsgiref",
         "--nofollow-import-to=xmlrpc",
         # ── 禁止导入 tkinter 无用子模块 ──
-        "--noinclude-module=tkinter.ttk",
-        "--noinclude-module=tkinter.scrolledtext",
-        "--noinclude-module=tkinter.filedialog",
-        "--noinclude-module=tkinter.messagebox",
-        "--noinclude-module=tkinter.colorchooser",
-        "--noinclude-module=tkinter.simpledialog",
-        "--noinclude-module=tkinter.dnd",
-        "--noinclude-module=tkinter.commondialog",
-        # ── 禁止冗余模块 ──
-        "--noinclude-module=shapely.conftest",
-        # ── 禁止冗余 DLL ──
-        "--noinclude-dlls=api-ms-win-*.dll",
-        "--noinclude-dlls=ext-ms-win-*.dll",
-        "--include-windows-runtime-dlls=no",
+        "--nofollow-import-to=tkinter.ttk",
+        "--nofollow-import-to=tkinter.scrolledtext",
+        "--nofollow-import-to=tkinter.filedialog",
+        "--nofollow-import-to=tkinter.messagebox",
+        "--nofollow-import-to=tkinter.colorchooser",
+        "--nofollow-import-to=tkinter.simpledialog",
+        "--nofollow-import-to=tkinter.dnd",
+        "--nofollow-import-to=tkinter.commondialog",
+        # ── 避免冗余模块 ──
+        "--nofollow-import-to=shapely.conftest",
         # ── 入口 ──
         str(ENTRY_SCRIPT),
     ]
