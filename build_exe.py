@@ -112,7 +112,6 @@ def build_command() -> list[str]:
         "--include-package=yaml",
         "--include-package=PIL",
         # ── 禁止导入无用 stdlib ──
-        "--nofollow-import-to=asyncio",
         "--nofollow-import-to=concurrent",
         "--nofollow-import-to=csv",
         "--nofollow-import-to=distutils",
@@ -122,7 +121,6 @@ def build_command() -> list[str]:
         "--nofollow-import-to=http",
         "--nofollow-import-to=idlelib",
         "--nofollow-import-to=lib2to3",
-        "--nofollow-import-to=multiprocessing",
         "--nofollow-import-to=pkg_resources",
         "--nofollow-import-to=pydoc",
         "--nofollow-import-to=setuptools",
