@@ -63,7 +63,7 @@ except Exception:
     pass  
 
 setup_project_log()
-_log = Log("controller", "d").logger  # 新增：全局复用
+_log = Log("controller", "i").logger  # 新增：全局复用
 
 class Controller:
     def __init__(self, target,project_name="Project" ,region_dict=None) -> None:
