@@ -1,11 +1,11 @@
-from log import Log
-from controller import Controller
+from module.log import Log
+from module.controller import Controller
 from time import sleep,time
 _log=Log("utils",'d').logger
 
-class utlis:
-    def __init__(self,window_title):
-         self.test=Controller(window_title)
+class Utils:
+    def __init__(self,window_title,t,d):
+         self.test=Controller(window_title,t,d)
     def gettextposition(self, text):
         result = {"text": text, "region": []}
         appear_text=self.wait(result["text"], timeout=3)
@@ -33,8 +33,8 @@ class utlis:
             
             start_time=time()
             while time()-start_time <timeout:
-                pic = self.screenshot_text(text)
-                result = self.ocr(pic)
+                pic = self.test.screenshot_text(text)
+                result = self.test.ocr(pic)
 
                 if isinstance(result, list) and result:
                     for i in result:

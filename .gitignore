@@ -13,3 +13,7 @@ GBFR_AutoReBattle.spec
 
 /nuitka-crash-report.xml
 build_log.txt
+
+/output.png
+/full.png
+/_tmp_check.py

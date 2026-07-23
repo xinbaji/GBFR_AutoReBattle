@@ -7,9 +7,11 @@ import sys
 import win32api
 import win32con
 import win32gui
+import win32ui
 from PIL import Image, ImageGrab
 from module.log import Log,setup_project_log
 from module.rapidocr_onnxruntime import RapidOCR
+import numpy as np
 
 
 INPUT_KEYBOARD = 1
@@ -61,7 +63,7 @@ except Exception:
     pass  
 
 setup_project_log()
-_log = Log("controller", "i").logger  # 新增：全局复用
+_log = Log("controller", "d").logger  # 新增：全局复用
 
 class Controller:
     def __init__(self, target,project_name="Project" ,region_dict=None) -> None:
@@ -126,11 +128,15 @@ class Controller:
             sys.exit(0)
     def screenshot_text(self, text):
         if self.window_rect is None:
-            left, top, width, height = self.get_window_rect(silent=True)
+            try:
+                left, top, width, height = self.get_window_rect(silent=True)
+            except TypeError:
+                self.focus_window()
+                left, top, width, height = self.get_window_rect(silent=True)
         else:
             left, top, width, height = self.window_rect
         if self.text2region is None or text not in self.text2region.keys():
-            img = Controller.screenshot(region=(left, top, width, height))
+            img = self.screenshot(region=(left, top, width, height))
         else:
             x1 = int(left + width * self.text2region[text][0])
             y1 = int(top + height * self.text2region[text][1])
@@ -141,13 +147,14 @@ class Controller:
                 height * (self.text2region[text][3] - self.text2region[text][1])
             )
             region = (x1, y1, width1, height1)
-            img = Controller.screenshot(region=region)
+            img = self.screenshot(region=region)
 
         return img
 
-    @staticmethod
-    def screenshot(
-        region: tuple[int, int, int, int] | None = None,
+    
+    
+    def screenshot(self,
+        region: tuple[int, int, int, int] | None = None
     ) -> Image.Image:
         """区域截图 (left, top, width, height)
 
@@ -156,20 +163,51 @@ class Controller:
         - 窗口在左/上侧副屏(坐标为负)：Pillow 对负 bbox 有偏移 bug，
           回退为截全虚拟桌面再裁切。
         """
-        if region is None:
-            img = ImageGrab.grab(all_screens=True)
-        else:
-            left, top, width, height = region
-            if left >= 0 and top >= 0:
-                img = ImageGrab.grab(
-                    bbox=(left, top, left + width, top + height),
-                    all_screens=True,
-                )
-            else:
-                full = ImageGrab.grab(all_screens=True)
-                img = full.crop((left, top, left + width, top + height))
+        if self.window_rect == None:
+            self.get_window_rect()
+        c_left, c_top, c_right, c_bottom = win32gui.GetClientRect(self._target_hwnd)
+        
+        w, h = c_right - c_left, c_bottom - c_top
+        hwnd_dc = win32gui.GetWindowDC(self._target_hwnd)
+        mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
+        save_dc = mfc_dc.CreateCompatibleDC()
+        bitmap = win32ui.CreateBitmap()
+        bitmap.CreateCompatibleBitmap(mfc_dc, w, h)
+        save_dc.SelectObject(bitmap)
+        ctypes.windll.user32.PrintWindow(self._target_hwnd, save_dc.GetSafeHdc(), 3)
+        bmpinfo = bitmap.GetInfo()
+        bmpstr = bitmap.GetBitmapBits(True)
+        img = np.frombuffer(bmpstr, dtype=np.uint8).reshape((bmpinfo["bmHeight"], bmpinfo["bmWidth"], 4))
+        win32gui.DeleteObject(bitmap.GetHandle())
+        save_dc.DeleteDC()
+        mfc_dc.DeleteDC()
+        win32gui.ReleaseDC(self._target_hwnd, hwnd_dc)
+        pic=Image.fromarray(img[:, :, [2,1,0,3]])
+        pic.save("full.png")
+        
+        win_left, win_top, _, _ = self.window_rect
+        r_left, r_top, r_w, r_h = region
+        rel_left = max(0, r_left - win_left)           # 转相对 + 防越界
+        rel_top  = max(0, r_top  - win_top)
+        pic = pic.crop((rel_left, rel_top, rel_left + r_w, rel_top + r_h))
+        
+                
+    
+        
+        hwnd = self._get_hwnd()
+        if hwnd is not None and win32gui.IsIconic(hwnd):
+            _log.warning("截图前检测到窗口最小化，尝试恢复前台窗口")
+            self.focus_window()
+            self.screenshot(region)
 
-        return img
+        
+        
+        pic.save("output.png")
+
+
+        
+
+        return pic
 
     def get_window_rect(self, silent: bool = False):
         hwnd = self._get_hwnd()
@@ -177,7 +215,10 @@ class Controller:
             if not silent:
                 _log.warning("未找到窗口: '%s'", self.target_window)
             return None
-
+        if win32gui.IsIconic(hwnd):
+            if not silent:
+                _log.debug("窗口最小化，沿用上次有效矩形: %s", self.window_rect)
+            return self.window_rect
        
         c_left, c_top, c_right, c_bottom = win32gui.GetClientRect(hwnd)
         left, top = win32gui.ClientToScreen(hwnd, (c_left, c_top))
@@ -500,7 +541,7 @@ class Controller:
                 prev[vk] = pressed
             sleep(0.05)
 
-    def ocr(self, pic, confidence=0.6):
+    def ocr(self, pic:Image, confidence=0.6):
         result = self.ocrmodel(pic, use_cls=False)
 
         if result is None or result[0] is None or len(result[0]) == 0:
@@ -826,3 +867,4 @@ class Controller:
             _log.info("---- 第 %d 次战斗 ----", times)
     
             func(self)
+            

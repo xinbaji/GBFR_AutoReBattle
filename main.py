@@ -5,6 +5,7 @@
 import threading
 from time import sleep, time
 from module.controller import Controller
+import argparse
 
 # ============================================================
 #  Relink 战斗逻辑
@@ -48,8 +49,8 @@ def relink_battle(relink: Controller) -> None:
             last_jump_time = time()
         elif skip_active and time() - last_jump_time > 3:
             skip_active = False
-
-    relink.wait("再次", fail_press=["enter"], timeout=30)
+    
+    
     while True:
         jump_flags = False
         if relink.running == False:
@@ -65,12 +66,45 @@ def relink_battle(relink: Controller) -> None:
             relink.press("w",interval=0.5)
             relink.press("enter", times=5,interval=0.1)
             break
+        
+def relink_battle_silent(relink: Controller):
+    
+    while True:
+        
+        if relink.wait("再次", timeout=0):
+            break
+    while True:
+        if relink.running == False:
+            return
 
+        if relink.wait("撤销", fail_press=[("3", 0.4)], timeout=0):
+            break
+        if relink.wait(
+            "挑战",
+            timeout=0,
+        ):
+            relink.press("w",interval=0.5)
+            relink.press("enter", times=10,interval=0.1)
+            break
+    while True:
+        if relink.running == False:
+            return
+        if relink.wait("跳跃", timeout=0):
+            break
+def parse_args():
+    parser = argparse.ArgumentParser(
+        prog="GBFR_AutoReBattle",
+        description="GBFR 自动重战工具",
+    )
+    parser.add_argument("--silent", action="store_true",
+                        help="静默模式")
+    return parser.parse_args()
 
 # ============================================================
 #  入口
 # ============================================================
 if __name__ == "__main__":
+    args = parse_args()
     RELINK_DICT = {
         "跳跃": [0.733, 0.8681, 0.7595, 0.8938],
         "再次": [0.1121, 0.8916, 0.1742, 0.9145],
@@ -85,4 +119,7 @@ if __name__ == "__main__":
     relink.set_battle_stop_key("f2")
 
     # 2. 直接启动战斗循环（控制台模式）
-    relink.start(relink_battle)
+    if args.silent:
+        relink.start(relink_battle_silent)
+    else:
+        relink.start(relink_battle)
