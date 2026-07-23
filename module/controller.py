@@ -325,7 +325,8 @@ class Controller:
                 root.withdraw()
                 root.attributes("-topmost", True)
                 self._tk_root = root
-            except Exception:
+            except Exception as e:
+                _log.warning("Toast 通知不可用 (tkinter 初始化失败): %s", e)
                 self._tk_root = None
             finally:
                 self._tk_ready.set()

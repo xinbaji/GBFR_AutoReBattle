@@ -111,6 +111,7 @@ def build_command() -> list[str]:
         "--include-module=skimage.measure",
         "--include-package=yaml",
         "--include-package=PIL",
+        "--include-package=tkinter",
         # ── 禁止导入无用 stdlib ──
         "--nofollow-import-to=concurrent",
         "--nofollow-import-to=csv",
