@@ -129,7 +129,6 @@ def build_command() -> list[str]:
         "--nofollow-import-to=setuptools",
         "--nofollow-import-to=socketserver",
         "--nofollow-import-to=sqlite3",
-        "--nofollow-import-to=subprocess",
         "--nofollow-import-to=test",
         "--nofollow-import-to=turtledemo",
         "--nofollow-import-to=unittest",
