@@ -108,7 +108,8 @@ class Controller:
             self._rect_thread: threading.Thread | None = None
             self._start_rect_watchdog()
             self._init_toast()
-            _log.info("初始化完成 | 目标窗口: '%s'", target)
+            _log.info("初始化完成 | 目标窗口: '%s' | Toast: %s",
+                      target, "可用" if self._tk_root is not None else "不可用")
             _log.debug("区域配置: %s 个", len(region_dict) if region_dict else 0)
     def run_as_admin(self) -> None:
         try:
@@ -326,7 +327,12 @@ class Controller:
                 root.attributes("-topmost", True)
                 self._tk_root = root
             except Exception as e:
-                _log.warning("Toast 通知不可用 (tkinter 初始化失败): %s", e)
+                msg = f"[WARN] Toast 通知不可用 (tkinter 初始化失败): {e}"
+                print(msg)
+                try:
+                    _log.warning("Toast 通知不可用 (tkinter 初始化失败): %s", e)
+                except Exception:
+                    pass
                 self._tk_root = None
             finally:
                 self._tk_ready.set()
