@@ -121,7 +121,6 @@ def build_command() -> list[str]:
         "--nofollow-import-to=html",
         "--nofollow-import-to=http",
         "--nofollow-import-to=idlelib",
-        "--nofollow-import-to=json",
         "--nofollow-import-to=lib2to3",
         "--nofollow-import-to=multiprocessing",
         "--nofollow-import-to=pkg_resources",
