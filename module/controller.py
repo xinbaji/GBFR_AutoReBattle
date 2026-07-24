@@ -665,7 +665,8 @@ class Controller:
                 continue
 
             sleep(delay)
-
+   
+        
     def _do_click_action(self, args: list, fallback_delay: float) -> float:
         """解析 (click, ...) 元组的点击逻辑，返回延迟秒数"""
         n = len(args)
@@ -881,13 +882,9 @@ class Controller:
             sleep(interval)
 
     def start(self, func):
-        times = 0
         while True:
+            if not self.running:
             # 等待 F1 启动
-            while not self.running:
                 sleep(0.1)
-
-            times += 1
-            _log.info("---- 第 %d 次战斗 ----", times)
-
-            func(self)
+            else:
+                func(self)

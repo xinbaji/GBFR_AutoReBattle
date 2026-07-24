@@ -5,6 +5,7 @@
 import threading
 from time import sleep, time
 from module.controller import Controller
+from module.log import Log,setup_project_log
 import argparse
 
 # ============================================================
@@ -12,85 +13,135 @@ import argparse
 # ============================================================
 def relink_battle(relink: Controller) -> None:
     """单次战斗 → 结算 → 再次挑战 的完整循环"""
-    jump_flags = False
-    skip_active = False
+    battle_active = False
     last_jump_time: float = 0.0
-
-    def jump_skip_loop() -> None:
+    fast_skip_remaining_times= 0
+    fast_skip_active=False
+    jump_flags=True
+    def skip_result() ->None:
+        while True:
+            if not fast_skip_active or not relink.running or battle_active:
+                sleep(0.1)
+                continue
+            try:
+                relink.press("enter",interval=0.1)
+            except Exception:
+                pass
+            
+    def battle_loop() -> None:
         """后台线程：跳跃画面时持续 W+中键连点 跳过动画"""
         while True:
-            if not skip_active or not relink.running:
+            if not battle_active or not relink.running:
                 sleep(0.1)
                 continue
             try:
                 relink.press("w", movement="press")
-                relink.click(key="middle", interval=0.2, times=5)
+                relink.click(key="middle", interval=0.5, times=3)
                 relink.press("w", movement="release")
             except Exception:
-                pass
-
-    skip_thread = threading.Thread(target=jump_skip_loop, daemon=True)
-    skip_thread.start()
-
+                 pass
+    
+    battle_thread = threading.Thread(target=battle_loop, daemon=True)
+    battle_thread.start()
+    skip_result_thread = threading.Thread(target=skip_result, daemon=True)
+    skip_result_thread.start()
+    times = 1
     while True:
         if not relink.running:
-            skip_active = False
+            battle_active = False
+            fast_skip_active =False
             return
-
-        if relink.wait("继续", timeout=0) and jump_flags:
-            skip_active = False
-            relink.press("enter", times=20, interval=0.1)
-            break
-
-        if relink.wait("跳跃", fail_press=["enter"], timeout=0):
+        
+        while True:
+            if not relink.running:
+                battle_active = False
+                fast_skip_active =False
+                return
+            if relink.wait("跳跃", fail_press=["enter"], timeout=0):
+                fast_skip_active=False
+                battle_active = True
+                last_jump_time = time()
+            elif battle_active and time() - last_jump_time > 3:
+                battle_active = False
+                log.info("--- 第 %d 场战斗结算 ---",times)
+                times+=1
+                break
             
-            jump_flags = True
-            skip_active = True
-            last_jump_time = time()
-        elif skip_active and time() - last_jump_time > 3:
-            skip_active = False
-    
-    
-    while True:
-        jump_flags = False
-        if relink.running == False:
-            return
+        while True:
+            if relink.running == False:
+                return
+            if fast_skip_remaining_times>0:
+                fast_skip_active=True
+                break
+            
+            if relink.wait("再次",fail_press=["enter"],timeout=1800):
+                break
+                
+        while True:
+            
+            if relink.running == False:
+                return
+            
+            if fast_skip_remaining_times>0 and jump_flags:
+                fast_skip_remaining_times -=1
+                break
+            
+            if not relink.wait("撤销", timeout=0):
+                
+                relink.press("3",interval=0.5)
+                fast_skip_remaining_times=8
+                jump_flags=False
+                
+                
+            else:
+                
+                fast_skip_active=True
+                break
+            if relink.wait("挑战",timeout=0):
+                relink.press("enter")
+                while relink.wait("挑战",timeout=0):
+                    relink.press("enter")
+                
+        jump_flags=True
+                
+        
 
-        if relink.wait("撤销", fail_press=[("3", 0.4)], timeout=0):
-            relink.press("enter", times=5,interval=0.1)
-            break
-        if relink.wait(
-            "挑战",
-            timeout=0,
-        ):
-            relink.press("w",interval=0.5)
-            relink.press("enter", times=5,interval=0.1)
-            break
+
         
 def relink_battle_silent(relink: Controller):
     
-    while True:
         
-        if relink.wait("再次", timeout=0):
-            break
-    while True:
-        if relink.running == False:
-            return
-
-        if relink.wait("撤销", fail_press=[("3", 0.4)], timeout=0):
-            break
-        if relink.wait(
-            "挑战",
-            timeout=0,
-        ):
-            relink.press("w",interval=0.5)
-            relink.press("enter", times=10,interval=0.1)
-            break
-    while True:
-        if relink.running == False:
-            return
-        if relink.wait("跳跃", timeout=0):
-            break
+        times = 1
+        
+        log.info("--- 第 %d 场战斗开始 ---",times)
+        while True:
+            if relink.running == False:
+                return
+            
+            if relink.wait("再次",timeout=0):
+                break
+                
+        while True:
+            
+            if relink.running == False:
+                return
+            
+            
+            if not relink.wait("撤销", timeout=0):
+                
+                relink.press("3",interval=0.5)
+                
+                
+            else:
+                relink.press("enter",times=6,interval=0.1)
+                break
+            if relink.wait("挑战",timeout=0):
+                relink.press("enter")
+                while relink.wait("挑战",timeout=0):
+                    relink.press("enter")
+                
+            
+    
 def parse_args():
     parser = argparse.ArgumentParser(
         prog="GBFR_AutoReBattle",
@@ -115,6 +166,7 @@ if __name__ == "__main__":
 
     # 1. 创建 Controller
     relink = Controller("Granblue Fantasy: Relink", "GBFR 自动重战", RELINK_DICT)
+    log=Log("GBFR","i").logger
     relink.set_battle_start_key("f1")
     relink.set_battle_stop_key("f2")
 
