@@ -612,6 +612,7 @@ class Controller:
         deadline = time() + timeout
 
         while True:
+            self.get_window_rect(silent=True)
             if not self._running:
                 _log.debug("等待中断 (热键停止): '%s'", text)
                 return False
