@@ -171,4 +171,4 @@ if __name__ == "__main__":
         relink.start(relink_battle_silent)
     else:
         # relink.start(relink_battle)
-        relink.start(relink_battle_silent)
+        relink.start(relink_battle)
