@@ -5,7 +5,7 @@
 import threading
 from time import sleep, time
 from module.controller import Controller
-from module.log import Log,setup_project_log
+from module.log import Log
 import argparse
 
 # ============================================================
@@ -101,6 +101,10 @@ def relink_battle(relink: Controller) -> None:
                 relink.press("enter")
                 while relink.wait("挑战",timeout=0):
                     relink.press("enter")
+            if relink.wait("结算",timeout=0):
+                relink.press("enter")
+                while relink.wait("结算",timeout=0):
+                    relink.press("enter")
                 
         jump_flags=True
                 
@@ -139,6 +143,10 @@ def relink_battle_silent(relink: Controller):
                 relink.press("enter")
                 while relink.wait("挑战",timeout=0):
                     relink.press("enter")
+            if relink.wait("结算",timeout=0):
+                relink.press("enter")
+                while relink.wait("结算",timeout=0):
+                    relink.press("enter")
                 
             
     
@@ -160,7 +168,7 @@ if __name__ == "__main__":
         "跳跃": [0.733, 0.8681, 0.7595, 0.8938],
         "再次": [0.1121, 0.8916, 0.1742, 0.9145],
         "撤销": [0.1121, 0.8916, 0.1742, 0.9145],
-        "继续": [0.8757, 0.9312, 0.9042, 0.959],
+        "结算": [0.4489, 0.3231, 0.5578, 0.3787],
         "挑战": [0.4489, 0.3231, 0.5578, 0.3787],
     }
 

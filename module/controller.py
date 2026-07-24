@@ -8,7 +8,7 @@ import win32api
 import win32con
 import win32gui
 import win32ui
-from PIL import Image, ImageGrab
+from PIL import Image
 from module.log import Log, setup_project_log
 from module.rapidocr_onnxruntime import RapidOCR
 import numpy as np
