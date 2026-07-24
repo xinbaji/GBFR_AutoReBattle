@@ -9,10 +9,9 @@ import win32con
 import win32gui
 import win32ui
 from PIL import Image, ImageGrab
-from module.log import Log,setup_project_log
+from module.log import Log, setup_project_log
 from module.rapidocr_onnxruntime import RapidOCR
 import numpy as np
-
 
 INPUT_KEYBOARD = 1
 KEYEVENTF_EXTENDEDKEY = 0x0001
@@ -60,32 +59,30 @@ class INPUT(ctypes.Structure):
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
 except Exception:
-    pass  
+    pass
 
 setup_project_log()
 _log = Log("controller", "i").logger  # 新增：全局复用
 
+
 class Controller:
-    def __init__(self, target,project_name="Project" ,region_dict=None) -> None:
+    def __init__(self, target, project_name="Project", region_dict=None) -> None:
         self.run_as_admin()
-        
+
         self.target_window = target
         self._target_hwnd: int | None = None
         self.window_rect = None
         self.text2region = region_dict
-        self.project_name=project_name
-        
+        self.project_name = project_name
+
         self._running: bool = False
         self._hotkeys: dict[int, callable] = {}
         self._hwnd_warned: bool = False
-        
 
-        
-        
         is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
         _log.info("=" * 40)
-        _log.info("  %s 启动",self.project_name)
-    
+        _log.info("  %s 启动", self.project_name)
+
         _log.info("  Admin: %s", "是" if is_admin else "否")
         _log.info("=" * 40)
         if not is_admin:
@@ -110,22 +107,28 @@ class Controller:
             self._rect_thread: threading.Thread | None = None
             self._start_rect_watchdog()
             self._init_toast()
-            _log.info("初始化完成 | 目标窗口: '%s' | Toast: %s",
-                      target, "可用" if self._tk_root is not None else "不可用")
+            _log.info(
+                "初始化完成 | 目标窗口: '%s' | Toast: %s",
+                target,
+                "可用" if self._tk_root is not None else "不可用",
+            )
             _log.debug("区域配置: %s 个", len(region_dict) if region_dict else 0)
+
     def run_as_admin(self) -> None:
         try:
             ctypes.windll.shell32.IsUserAnAdmin() != 0
         except Exception:
             ctypes.windll.shell32.ShellExecuteW(
-            None,
-            "runas",
-            sys.argv[0],            # 原始 exe 路径
-            " ".join(sys.argv[1:]), # 真正的参数
-            None,
-            1,)
+                None,
+                "runas",
+                sys.argv[0],  # 原始 exe 路径
+                " ".join(sys.argv[1:]),  # 真正的参数
+                None,
+                1,
+            )
 
             sys.exit(0)
+
     def screenshot_text(self, text):
         if self.window_rect is None:
             try:
@@ -151,10 +154,8 @@ class Controller:
 
         return img
 
-    
-    
-    def screenshot(self,
-        region: tuple[int, int, int, int] | None = None
+    def screenshot(
+        self, region: tuple[int, int, int, int] | None = None
     ) -> Image.Image:
         """区域截图 (left, top, width, height)
 
@@ -166,7 +167,7 @@ class Controller:
         if self.window_rect == None:
             self.get_window_rect()
         c_left, c_top, c_right, c_bottom = win32gui.GetClientRect(self._target_hwnd)
-        
+
         w, h = c_right - c_left, c_bottom - c_top
         hwnd_dc = win32gui.GetWindowDC(self._target_hwnd)
         mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
@@ -177,35 +178,26 @@ class Controller:
         ctypes.windll.user32.PrintWindow(self._target_hwnd, save_dc.GetSafeHdc(), 3)
         bmpinfo = bitmap.GetInfo()
         bmpstr = bitmap.GetBitmapBits(True)
-        img = np.frombuffer(bmpstr, dtype=np.uint8).reshape((bmpinfo["bmHeight"], bmpinfo["bmWidth"], 4))
+        img = np.frombuffer(bmpstr, dtype=np.uint8).reshape(
+            (bmpinfo["bmHeight"], bmpinfo["bmWidth"], 4)
+        )
         win32gui.DeleteObject(bitmap.GetHandle())
         save_dc.DeleteDC()
         mfc_dc.DeleteDC()
         win32gui.ReleaseDC(self._target_hwnd, hwnd_dc)
-        pic=Image.fromarray(img[:, :, [2,1,0,3]])
-        pic.save("full.png")
-        
+        pic = Image.fromarray(img[:, :, [2, 1, 0, 3]])
+
         win_left, win_top, _, _ = self.window_rect
         r_left, r_top, r_w, r_h = region
-        rel_left = max(0, r_left - win_left)           # 转相对 + 防越界
-        rel_top  = max(0, r_top  - win_top)
+        rel_left = max(0, r_left - win_left)  # 转相对 + 防越界
+        rel_top = max(0, r_top - win_top)
         pic = pic.crop((rel_left, rel_top, rel_left + r_w, rel_top + r_h))
-        
-                
-    
-        
+
         hwnd = self._get_hwnd()
         if hwnd is not None and win32gui.IsIconic(hwnd):
             _log.warning("截图前检测到窗口最小化，尝试恢复前台窗口")
             self.focus_window()
             self.screenshot(region)
-
-        
-        
-        pic.save("output.png")
-
-
-        
 
         return pic
 
@@ -219,7 +211,7 @@ class Controller:
             if not silent:
                 _log.debug("窗口最小化，沿用上次有效矩形: %s", self.window_rect)
             return self.window_rect
-       
+
         c_left, c_top, c_right, c_bottom = win32gui.GetClientRect(hwnd)
         left, top = win32gui.ClientToScreen(hwnd, (c_left, c_top))
         right, bottom = win32gui.ClientToScreen(hwnd, (c_right, c_bottom))
@@ -227,7 +219,7 @@ class Controller:
         height = bottom - top
         self.window_rect = (left, top, width, height)
         return (left, top, width, height)
-    
+
     def _rect_watchdog(self, interval: float = 0.5) -> None:
         """后台线程：周期性刷新窗口客户区矩形，窗口移动/缩放时保持最新"""
         while not self._stop_event.is_set():
@@ -257,11 +249,9 @@ class Controller:
             _log.warning("聚焦失败，未找到窗口: '%s'", self.target_window)
             return False
 
-        
         user32 = ctypes.windll.user32
         kernel32 = ctypes.windll.kernel32
 
-        
         user32.AllowSetForegroundWindow(-1)  # ASFW_ANY = -1
 
         foreground = user32.GetForegroundWindow()
@@ -279,9 +269,9 @@ class Controller:
             else:
                 win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
                 user32.SetForegroundWindow(hwnd)
-        
 
         return user32.GetForegroundWindow() == hwnd
+
     def _get_hwnd(self) -> int | None:
         """返回目标窗口句柄并缓存；窗口句柄失效时自动重新查找
 
@@ -298,11 +288,11 @@ class Controller:
             return hwnd
         else:
             if not self._hwnd_warned:
-                _log.warning("没有找到窗口: %s ",self.target_window)
+                _log.warning("没有找到窗口: %s ", self.target_window)
                 self._hwnd_warned = True
             if self.running == True:
-                self.running=False
-    
+                self.running = False
+
     def _find_window(self, title: str) -> int | None:
         """按标题（不区分大小写模糊匹配）查找可见窗口句柄"""
         result: list[int] = []
@@ -331,14 +321,16 @@ class Controller:
 
     def set_battle_start_key(self, key: str) -> None:
         """设置战斗开始快捷键（自动注册热键）
-        
+
         :param key: 按键名 (如 'f1', 'f2')
         """
+
         def _on_start() -> None:
             self._running = True
-            _log.info(">> %s 已启动",self.project_name)
-            self._show_toast(self.project_name, "已启动")
-        _log.info("按 %s 启动",key)
+            _log.info(">> %s 已启动", self.project_name)
+            self.show_toast(self.project_name, "已启动")
+
+        _log.info("按 %s 启动", key)
         self._register_hotkey(key, _on_start)
 
     def set_battle_stop_key(self, key: str) -> None:
@@ -346,11 +338,13 @@ class Controller:
 
         :param key: 按键名 (如 'f1', 'f2')
         """
+
         def _on_stop() -> None:
             self._running = False
-            _log.info("<< %s 已停止 按启动键重新开始",self.project_name)
-            self._show_toast(self.project_name, "已停止，按启动键重新开始")
-        _log.info("按 %s 停止",key)
+            _log.info("<< %s 已停止 按启动键重新开始", self.project_name)
+            self.show_toast(self.project_name, "已停止，按启动键重新开始")
+
+        _log.info("按 %s 停止", key)
         self._register_hotkey(key, _on_stop)
 
     # ============================================================
@@ -384,7 +378,7 @@ class Controller:
         t.start()
         self._tk_ready.wait(timeout=3)
 
-    def _show_toast(self, title: str, content: str) -> None:
+    def show_toast(self, title: str, content: str) -> None:
         """Win11 风格通知：圆角、阴影、滑入滑出动画，总时长 5 秒，非阻塞"""
         if self._tk_root is None:
             return
@@ -393,7 +387,6 @@ class Controller:
 
     def _create_toast(self, title: str, content: str) -> None:
         """（在 tk 线程内运行）创建并播放一条 toast 通知"""
-        
 
         root = self._tk_root
 
@@ -414,7 +407,7 @@ class Controller:
         STAY_MS = 3800  # 5000 - 600 - 600
         EXIT_MS = 600
         ENTER_STEPS = 40  # 15ms/step → ~67fps
-        EXIT_STEPS = 30   # 20ms/step → ~50fps
+        EXIT_STEPS = 30  # 20ms/step → ~50fps
 
         screen_w = root.winfo_screenwidth()
         screen_h = root.winfo_screenheight()
@@ -430,12 +423,30 @@ class Controller:
         def _round_rect(c: tk.Canvas, **kw) -> int:
             x, y, w, h, r = 0, 0, WIN_W, WIN_H, RADIUS
             pts = [
-                x + r, y, x + w - r, y,
-                x + w, y, x + w, y + r,
-                x + w, y + h - r, x + w, y + h,
-                x + w - r, y + h, x + r, y + h,
-                x, y + h, x, y + h - r,
-                x, y + r, x, y,
+                x + r,
+                y,
+                x + w - r,
+                y,
+                x + w,
+                y,
+                x + w,
+                y + r,
+                x + w,
+                y + h - r,
+                x + w,
+                y + h,
+                x + w - r,
+                y + h,
+                x + r,
+                y + h,
+                x,
+                y + h,
+                x,
+                y + h - r,
+                x,
+                y + r,
+                x,
+                y,
             ]
             return c.create_polygon(pts, smooth=True, **kw)
 
@@ -446,8 +457,9 @@ class Controller:
         shadow.attributes("-alpha", 0.0)
         shadow.configure(bg="black")
         shadow.geometry(f"{WIN_W}x{WIN_H}+{screen_w}+{final_y}")
-        sh_canvas = tk.Canvas(shadow, width=WIN_W, height=WIN_H,
-                              bg="black", highlightthickness=0)
+        sh_canvas = tk.Canvas(
+            shadow, width=WIN_W, height=WIN_H, bg="black", highlightthickness=0
+        )
         sh_canvas.pack(fill="both", expand=True)
         _round_rect(sh_canvas, fill="black", outline="")
 
@@ -459,8 +471,9 @@ class Controller:
         toast.configure(bg=BG)
         toast.geometry(f"{WIN_W}x{WIN_H}+{screen_w}+{final_y}")
 
-        canvas = tk.Canvas(toast, width=WIN_W, height=WIN_H,
-                           bg=BG, highlightthickness=0)
+        canvas = tk.Canvas(
+            toast, width=WIN_W, height=WIN_H, bg=BG, highlightthickness=0
+        )
         canvas.pack(fill="both", expand=True)
 
         # 圆角背景 + 边框
@@ -469,10 +482,22 @@ class Controller:
         # 标题与内容
         title_text = _clip(title, 30)
         body_text = _clip(content, 45)
-        canvas.create_text(20, 22, text=title_text, anchor="w", fill=TITLE_FG,
-                           font=("Microsoft YaHei UI", 11, "bold"))
-        canvas.create_text(20, 50, text=body_text, anchor="w", fill=TEXT_FG,
-                           font=("Microsoft YaHei UI", 10))
+        canvas.create_text(
+            20,
+            22,
+            text=title_text,
+            anchor="w",
+            fill=TITLE_FG,
+            font=("Microsoft YaHei UI", 11, "bold"),
+        )
+        canvas.create_text(
+            20,
+            50,
+            text=body_text,
+            anchor="w",
+            fill=TEXT_FG,
+            font=("Microsoft YaHei UI", 10),
+        )
 
         # ===== 进入动画（smoothstep ease-out） =====
         def anim_in(step: int = 0) -> None:
@@ -541,7 +566,7 @@ class Controller:
                 prev[vk] = pressed
             sleep(0.05)
 
-    def ocr(self, pic:Image, confidence=0.6):
+    def ocr(self, pic: Image, confidence=0.6):
         result = self.ocrmodel(pic, use_cls=False)
 
         if result is None or result[0] is None or len(result[0]) == 0:
@@ -598,7 +623,7 @@ class Controller:
                 if self._find_ocr_match(result, text):
                     elapsed = time() + timeout - deadline
                     _log.debug("已找到: '%s' (%.1fs)", text, elapsed)
-                    
+
                     self._do_press(success_press)
                     return True
 
@@ -668,8 +693,6 @@ class Controller:
             return True
         return False
 
-    
-
     MOUSE_MAP = {
         "left": [win32con.MOUSEEVENTF_LEFTDOWN, win32con.MOUSEEVENTF_LEFTUP],
         "right": [win32con.MOUSEEVENTF_RIGHTDOWN, win32con.MOUSEEVENTF_RIGHTUP],
@@ -678,7 +701,7 @@ class Controller:
     }
 
     def click(self, x=200, y=200, key="left", times=1, interval=0):
-        _log.debug("点击%s: (%d, %d) x%d", key,x, y, times)
+        _log.debug("点击%s: (%d, %d) x%d", key, x, y, times)
         self.focus_window()
         for _ in range(times):
 
@@ -856,15 +879,15 @@ class Controller:
             if movement != "press":
                 self._send_key(vk, keyup=True)
             sleep(interval)
-    def start(self,func):
+
+    def start(self, func):
         times = 0
         while True:
             # 等待 F1 启动
             while not self.running:
                 sleep(0.1)
-    
+
             times += 1
             _log.info("---- 第 %d 次战斗 ----", times)
-    
+
             func(self)
-            

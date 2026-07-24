@@ -120,6 +120,8 @@ if __name__ == "__main__":
 
     # 2. 直接启动战斗循环（控制台模式）
     if args.silent:
+        relink.show_toast("GBFR 自动重战","静默模式已开启")
         relink.start(relink_battle_silent)
     else:
+        
         relink.start(relink_battle)
