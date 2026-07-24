@@ -145,10 +145,10 @@ class Log:
 
     def __init__(self, log_name: str, mode: str = "d") -> None:
         # --- 级别 ---
-        log_level = logging.DEBUG if mode == "d" else logging.INFO
+        console_level = logging.DEBUG if mode == "d" else logging.INFO
 
         self.logger = logging.getLogger(log_name)
-        self.logger.setLevel(log_level)
+        self.logger.setLevel(logging.DEBUG)  # 始终生成全级别日志，传播到 root→文件
         self.logger.propagate = True  # 向上传播到 root（统一文件输出）
 
         # 防止重复添加 handler（多次实例化同一 logger 名时）
@@ -157,7 +157,7 @@ class Log:
 
         # --- 仅控制台 Handler（彩色），不创建独立文件 ---
         ch = logging.StreamHandler(sys.stdout)
-        ch.setLevel(log_level)
+        ch.setLevel(console_level)  # 控制台按 mode 过滤显示级别
         ch.setFormatter(ConsoleFormatter())
         self.logger.addHandler(ch)
 
